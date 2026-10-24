@@ -294,8 +294,10 @@ fn schedule_delete(dir: &Path) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let exe = dir.join(UNINSTALLER_EXE);
-    let cmd = format!("ping -n 4 127.0.0.1 >nul & del /f /q \"{}\" & rmdir \"{}\"", exe.display(), dir.display());
-    let _ = std::process::Command::new("cmd").args(["/C", &cmd]).creation_flags(CREATE_NO_WINDOW).spawn();
+    // raw_arg: cmd.exe has its own quoting rules; Rust's normal argument escaping turns the
+    // quotes around the paths into \" which cmd doesn't understand, so the delete silently failed.
+    let cmd = format!("/C ping -n 4 127.0.0.1 >nul & del /f /q \"{}\" & rmdir \"{}\"", exe.display(), dir.display());
+    let _ = std::process::Command::new("cmd").raw_arg(cmd).creation_flags(CREATE_NO_WINDOW).spawn();
 }
 
 fn register(t: &Target, opts: &Options, size_kb: u64) -> Result<(), String> {

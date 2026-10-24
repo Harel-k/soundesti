@@ -16,6 +16,7 @@ official manual; anything else is marked *to verify*.
 | B6 | MCP server (found while building it) | Answering a rejected request before reading its body made Windows reset the connection, so clients saw `connection reset` instead of the 403 | Confusing failures | Body is always read first; connection closed gracefully |
 | B7 | MCP stdio bridge (found while building it) | The app launched by the bridge inherited the client's stdin/stdout pipes, so the client never saw the bridge's output end (hang on reconnect) | AI client hangs | Bridge marks its std handles non-inheritable before launching the app |
 | B8 | MCP | A UTF-8 byte-order mark at the start of a message caused a parse error | First request fails for some Windows clients | BOM is ignored (bridge and server; tested) |
+| B9 | Installer (found during the owner's real uninstall) | The delayed self-delete passed quoted paths through Rust's argument escaping, which cmd.exe misreads, so `Uninstall Soundesti.exe` (and the folder) were left behind | Leftover files after uninstall | Command line passed verbatim (`raw_arg`); verified: empty folder removed, user files kept |
 | B5 | Toolbar (FL parity) | Song position used bar:beat:tick; FL shows **B:S:T** (bars:steps:ticks, 24 ticks/step) | Unfamiliar to FL users | New `BarStepTick` (tested), toolbar shows `1:01:00` style |
 
 Checked with no bug found: seek during held notes, channel removal while sounding,
