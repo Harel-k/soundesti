@@ -1,10 +1,13 @@
 //! Soundesti native instruments.
 
+pub mod chopper;
 mod common;
 pub mod drums;
 pub mod harpa;
 pub mod orbit;
+pub mod padz;
 pub mod sampler;
+pub mod tide;
 pub mod trident;
 
 pub use drums::{Clapper, Hatz, Kickr};
@@ -32,6 +35,20 @@ pub static CATALOG: &[InstrumentInfo] = &[
         category: "Samplers",
         description: "Plays an audio file: root key, pitch tracking, one-shot or gated, reverse",
         params: &sampler::PARAMS,
+    },
+    InstrumentInfo {
+        type_id: chopper::TYPE_ID,
+        name: "Chopper",
+        category: "Samplers",
+        description: "Loop slicer: cuts a sample into slices played from consecutive keys",
+        params: &chopper::PARAMS,
+    },
+    InstrumentInfo {
+        type_id: padz::TYPE_ID,
+        name: "Padz",
+        category: "Drums",
+        description: "16-pad drum sampler: a sample, volume, pan and tune per pad",
+        params: &padz::PARAMS,
     },
     InstrumentInfo {
         type_id: drums::kick::TYPE_ID,
@@ -75,6 +92,13 @@ pub static CATALOG: &[InstrumentInfo] = &[
         description: "Plucked-string physical model: guitars, harps, plucks",
         params: &harpa::PARAMS,
     },
+    InstrumentInfo {
+        type_id: tide::TYPE_ID,
+        name: "Tide",
+        category: "Synths",
+        description: "Wavetable synth: morphing waves, LFO, unison, filter",
+        params: &tide::PARAMS,
+    },
 ];
 
 /// Creates a native instrument by its persistent type id.
@@ -87,6 +111,9 @@ pub fn create_instrument(type_id: &str, sample_rate: f32) -> Option<Box<dyn Inst
         orbit::TYPE_ID => Box::new(Orbit::new(sample_rate)),
         harpa::TYPE_ID => Box::new(Harpa::new(sample_rate)),
         sampler::TYPE_ID => Box::new(Sampler::new(sample_rate)),
+        chopper::TYPE_ID => Box::new(chopper::Chopper::new(sample_rate)),
+        tide::TYPE_ID => Box::new(tide::Tide::new(sample_rate)),
+        padz::TYPE_ID => Box::new(padz::Padz::new(sample_rate)),
         _ => return None,
     })
 }
@@ -109,6 +136,9 @@ pub const INSTRUMENT_TYPES: &[(&str, &str)] = &[
     (trident::TYPE_ID, "Trident"),
     (orbit::TYPE_ID, "Orbit"),
     (harpa::TYPE_ID, "Harpa"),
+    (chopper::TYPE_ID, "Chopper"),
+    (tide::TYPE_ID, "Tide"),
+    (padz::TYPE_ID, "Padz"),
 ];
 
 #[cfg(test)]
@@ -146,7 +176,8 @@ mod tests {
                 "{} output out of range",
                 info.name
             );
-            if info.type_id != sampler::TYPE_ID {
+            // Sample-based instruments are silent until they get a sample.
+            if ![sampler::TYPE_ID, chopper::TYPE_ID, padz::TYPE_ID].contains(&info.type_id) {
                 assert!(l.iter().any(|x| x.abs() > 1e-3), "{} made no sound", info.name);
             }
         }

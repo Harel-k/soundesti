@@ -147,6 +147,10 @@ pub struct App {
     pub browser: crate::browser::BrowserView,
     pub plugins: crate::plugins::PluginUi,
     pub live: crate::live::LiveInput,
+    /// Selected pad in each Padz window.
+    pub pad_selected: HashMap<ChannelId, usize>,
+    /// Preset name being typed, per instrument/effect window.
+    pub preset_naming: HashMap<String, String>,
     /// Plugin editor to open once the next sync has started the plugin.
     pub pending_editor: Option<soundesti_session::PluginKey>,
     pub selected_track: usize,
@@ -247,6 +251,8 @@ impl App {
             browser: crate::browser::BrowserView::new(),
             plugins: crate::plugins::PluginUi::new(crate::plugins::main_window_handle(cc)),
             pending_editor: None,
+            pad_selected: HashMap::new(),
+            preset_naming: HashMap::new(),
             live: crate::live::LiveInput::new(
                 cc.storage.and_then(|s| s.get_string(crate::live::MIDI_PORT_KEY)).filter(|p| !p.is_empty()),
             ),
@@ -1055,9 +1061,15 @@ impl App {
         let id = self.project.add_channel(name, type_id);
         self.select_channel(id, false);
         self.set_status(format!("Added {name}."));
-        // A new Sampler is useless without audio: ask for a file straight away.
-        if type_id == soundesti_synthesis::sampler::TYPE_ID {
+        // A new Sampler or Chopper is useless without audio: ask for a file straight away.
+        if type_id == soundesti_synthesis::sampler::TYPE_ID || type_id == soundesti_synthesis::chopper::TYPE_ID {
             self.choose_sample(id);
+        }
+        if type_id == soundesti_synthesis::padz::TYPE_ID
+            && let Some(c) = self.project.channel_mut(id)
+        {
+            c.instrument.pads = crate::padz_ui::default_kit();
+            self.needs_sync = true;
         }
     }
 
@@ -1103,9 +1115,14 @@ impl App {
         self.checkpoint("Load sample");
         let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         if let Some(c) = self.project.channel_mut(id) {
-            if c.instrument.type_id != soundesti_synthesis::sampler::TYPE_ID {
+            // Chopper keeps its type (it slices the sample); anything else becomes a Sampler.
+            if c.instrument.type_id != soundesti_synthesis::sampler::TYPE_ID
+                && c.instrument.type_id != soundesti_synthesis::chopper::TYPE_ID
+            {
                 c.instrument.type_id = soundesti_synthesis::sampler::TYPE_ID.into();
                 c.instrument.params.clear();
+                c.instrument.plugin = None;
+                c.instrument.pads.clear();
             }
             c.instrument.sample = Some(path.display().to_string());
             c.name = stem.clone();

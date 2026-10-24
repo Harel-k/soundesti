@@ -74,6 +74,16 @@ pub trait Instrument: Send {
     fn set_sample(&mut self, sample: Option<std::sync::Arc<SampleData>>) -> Option<std::sync::Arc<SampleData>> {
         sample
     }
+
+    /// Multi-sample instruments (drum pads): the sample for slot `index`. Same ownership
+    /// rule as `set_sample`. The default treats index 0 as the single sample.
+    fn set_sample_at(
+        &mut self,
+        index: usize,
+        sample: Option<std::sync::Arc<SampleData>>,
+    ) -> Option<std::sync::Arc<SampleData>> {
+        if index == 0 { self.set_sample(sample) } else { sample }
+    }
 }
 
 /// An insert effect. Runs on the audio thread: no allocation, locks or I/O in `process`,

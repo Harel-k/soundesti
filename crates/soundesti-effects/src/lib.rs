@@ -1,6 +1,6 @@
 //! Soundesti native insert effects (original implementations). Each covers the role of a
-//! common mixer effect: EQ, compressor, limiter, delay, reverb, distortion, chorus,
-//! filter and a gain/pan/width utility.
+//! common mixer effect: EQ, filter, compressor, multiband compressor, gate, limiter,
+//! delay, reverb, chorus, phaser, flanger, distortion, an enhancer and a utility.
 
 mod base;
 pub mod chorus;
@@ -9,6 +9,9 @@ pub mod distortion;
 pub mod dynamics;
 pub mod eq;
 pub mod filter;
+pub mod gate;
+pub mod modulation;
+pub mod multiband;
 pub mod reverb;
 pub mod utility;
 
@@ -45,6 +48,20 @@ pub static CATALOG: &[EffectInfo] = &[
         params: &dynamics::COMP_PARAMS,
     },
     EffectInfo {
+        type_id: multiband::MULTIBAND_ID,
+        name: "Multiband Compressor",
+        category: "Dynamics",
+        description: "Three-band compressor with adjustable crossovers and band gains",
+        params: &multiband::MULTIBAND_PARAMS,
+    },
+    EffectInfo {
+        type_id: gate::TYPE_ID,
+        name: "Gate",
+        category: "Dynamics",
+        description: "Noise gate with hold and range",
+        params: &gate::PARAMS,
+    },
+    EffectInfo {
         type_id: dynamics::LIMIT_ID,
         name: "Limiter",
         category: "Dynamics",
@@ -66,6 +83,20 @@ pub static CATALOG: &[EffectInfo] = &[
         params: &reverb::PARAMS,
     },
     EffectInfo {
+        type_id: modulation::PHASER_ID,
+        name: "Phaser",
+        category: "Modulation",
+        description: "Swept allpass phaser, 4-8 stages",
+        params: &modulation::PHASER_PARAMS,
+    },
+    EffectInfo {
+        type_id: modulation::FLANGER_ID,
+        name: "Flanger",
+        category: "Modulation",
+        description: "Short modulated delay with feedback",
+        params: &modulation::FLANGER_PARAMS,
+    },
+    EffectInfo {
         type_id: chorus::TYPE_ID,
         name: "Chorus",
         category: "Modulation",
@@ -78,6 +109,13 @@ pub static CATALOG: &[EffectInfo] = &[
         category: "Distortion",
         description: "Soft clip, hard clip, wavefold and bitcrush with tone control",
         params: &distortion::PARAMS,
+    },
+    EffectInfo {
+        type_id: multiband::POLISH_ID,
+        name: "Polish",
+        category: "Enhance",
+        description: "One-knob enhancer: band compression, warmth and air",
+        params: &multiband::POLISH_PARAMS,
     },
     EffectInfo {
         type_id: utility::TYPE_ID,
@@ -99,6 +137,11 @@ pub fn create(type_id: &str, sample_rate: f32) -> Option<Box<dyn Effect>> {
         chorus::TYPE_ID => Box::new(chorus::Chorus::new(sample_rate)),
         distortion::TYPE_ID => Box::new(distortion::Distortion::new(sample_rate)),
         utility::TYPE_ID => Box::new(utility::Utility::new(sample_rate)),
+        gate::TYPE_ID => Box::new(gate::Gate::new(sample_rate)),
+        modulation::PHASER_ID => Box::new(modulation::Phaser::new(sample_rate)),
+        modulation::FLANGER_ID => Box::new(modulation::Flanger::new(sample_rate)),
+        multiband::MULTIBAND_ID => Box::new(multiband::Multiband::new(sample_rate)),
+        multiband::POLISH_ID => Box::new(multiband::Polish::new(sample_rate)),
         _ => return None,
     })
 }

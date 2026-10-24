@@ -57,6 +57,9 @@ pub struct InstrumentState {
     /// Third-party plugin (when `type_id` is "plugin").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin: Option<PluginRef>,
+    /// Per-pad audio files for multi-sample instruments (drum pads); index = pad.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pads: Vec<Option<String>>,
 }
 
 /// A third-party plugin (VST2, VST3 or CLAP) and its saved settings.
@@ -398,6 +401,7 @@ impl Project {
                 params: BTreeMap::new(),
                 sample: None,
                 plugin: None,
+                pads: Vec::new(),
             },
             volume: 0.78,
             pan: 0.0,

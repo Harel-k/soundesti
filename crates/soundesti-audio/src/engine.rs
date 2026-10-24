@@ -72,6 +72,12 @@ pub enum Command {
         slot: usize,
         sample: Option<std::sync::Arc<soundesti_plugin_api::SampleData>>,
     },
+    /// A sample for one slot of a multi-sample instrument (drum pads).
+    SetSampleAt {
+        slot: usize,
+        index: usize,
+        sample: Option<std::sync::Arc<soundesti_plugin_api::SampleData>>,
+    },
     /// Live/preview note (piano keys, step clicks, typing keyboard).
     NoteOn {
         slot: usize,
@@ -415,6 +421,15 @@ impl Engine {
             Command::SetSample { slot, sample } => {
                 let old = match self.channels.get_mut(slot) {
                     Some(Some(ch)) => ch.instrument.set_sample(sample),
+                    _ => sample,
+                };
+                if let Some(old) = old {
+                    self.trash(Garbage::Sample(old));
+                }
+            }
+            Command::SetSampleAt { slot, index, sample } => {
+                let old = match self.channels.get_mut(slot) {
+                    Some(Some(ch)) => ch.instrument.set_sample_at(index, sample),
                     _ => sample,
                 };
                 if let Some(old) = old {

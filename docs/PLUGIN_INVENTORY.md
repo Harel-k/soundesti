@@ -12,6 +12,9 @@ All names, code and sounds are original. Parameters persist by stable key; autom
 | **Hatz** | Hi-hat synth | inharmonic square-wave bank + noise, tone filter, metal amount, choke | yes | TESTED |
 | **Orbit** | 2-operator FM synth (role of a small FM synth) | ratio, index + envelope, feedback, ADSR | yes | TESTED |
 | **Harpa** | Plucked string (role of a pluck synth) | Karplus-Strong, brightness, pick hardness, sustain | yes | TESTED |
+| **Tide** | Wavetable synth | 8 morphing frames band-limited per octave, position LFO, 1-5 unison voices, filter, ADSR | tuning, timbre, aliasing bounds | TESTED |
+| **Padz** | 16-pad drum sampler (role of FPC) | sample, volume, pan, tune per pad; C5 and GM key ranges; bundled default kit | pad mapping | TESTED |
+| **Chopper** | Loop slicer (role of Slicex) | equal or hit-detected slices on consecutive keys, edge fades, gated or whole-slice | slicing, hit detection | TESTED |
 
 ## Effects (mixer inserts)
 | Name | Role / FL reference | Techniques | Tests | Status |
@@ -24,8 +27,15 @@ All names, code and sounds are original. Parameters persist by stable key; autom
 | **Reverb** | Algorithmic reverb (role of Fruity Reeverb 2) | 8 damped combs + 4 allpasses per channel, pre-delay, width | decay | TESTED |
 | **Chorus** | Stereo chorus | 2 LFO-modulated taps in quadrature | stability | TESTED |
 | **Distortion** | Distortion (role of Fruity Blood Overdrive / Fast Dist) | soft/hard clip, wavefold, bitcrush, tone, mix | bounds | TESTED |
+| **Multiband Compressor** | 3-band compressor (role of Maximus-style band dynamics) | LR4 crossovers, per-band threshold and gain | flat band sum, band isolation | TESTED |
+| **Gate** | Noise gate | threshold, attack, hold, release, range | gating | TESTED |
+| **Phaser** | Phaser | 4/6/8 first-order allpass stages, LFO, feedback | audible + dry at zero mix | TESTED |
+| **Flanger** | Flanger | modulated short delay with +/- feedback | audible + dry at zero mix | TESTED |
+| **Polish** | One-knob enhancer (role of Soundgoodizer) | band compression, saturation, air shelf | dry at zero mix, denser when on | TESTED |
 | **Utility** | Gain / pan / width (role of Fruity Stereo Shaper basics) | M/S width, balance pan | identity, mono | TESTED |
 
 Every effect is also checked for silence-in/silence-out and finite output at extreme settings.
 
-Planned next: wavetable synth, drum-pad sampler, multiband compressor, gate, phaser/flanger, vocoder.
+Presets: every native instrument and effect has a presets bar (built-in starting points plus user presets in %APPDATA%\Soundesti\Presets).
+
+Planned next: vocoder (needs sidechain routing), pitch correction, spectrum analyzer, granular sampler.

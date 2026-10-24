@@ -12,8 +12,8 @@ built from scratch with original code, instruments and artwork.
 - Channel Rack step sequencer, Piano roll (draw/paint/delete/mute/slice/select/zoom tools, velocity lane, undo).
 - **Playlist** with pattern clips and song mode (PAT/SONG), FL-style tools and gestures.
 - **Mixer**: master + 125 inserts with faders, pan, mute, solo, meters and **10 insert effect slots** per track.
-- **Instruments** (all original): Sampler, Kickr, Clapper, Hatz, Orbit (FM), Harpa (plucked string), Trident (subtractive).
-- **Effects** (all original): EQ, Filter, Compressor, Limiter, Delay, Reverb, Chorus, Distortion, Utility.
+- **Instruments** (all original): Sampler, Chopper (slicer), Padz (16 pads), Kickr, Clapper, Hatz, Trident (subtractive), Orbit (FM), Tide (wavetable), Harpa (plucked string) — with presets.
+- **Effects** (all original): EQ, Filter, Compressor, Multiband Compressor, Gate, Limiter, Delay, Reverb, Chorus, Phaser, Flanger, Distortion, Polish (enhancer), Utility.
 - **VST, VST3 and CLAP plugins**: instruments and mixer effects with their own windows (OPTIONS › Manage plugins). With FL Studio installed, *FL Studio VSTi* brings FL's own instruments and effects in.
 - **FL Studio project import** (.flp): tempo, channels, patterns, notes and the Playlist come across; FL's own plugins become the closest Soundesti instruments.
 - FL-style layout: Browser docked on the left, Playlist filling the workspace.

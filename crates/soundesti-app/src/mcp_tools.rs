@@ -48,6 +48,7 @@ const WINDOWS: &[&str] = &[
 
 pub fn tool_definitions() -> Vec<Value> {
     let ch = json!({"type": ["integer", "string"], "description": CHANNEL});
+    let windows: Vec<&str> = WINDOWS.iter().copied().chain(["instrument"]).collect();
     vec![
         tool(
             "get_state",
@@ -182,8 +183,8 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "set_window",
-            "Open or close a window.",
-            json!({"window": {"type": "string", "enum": WINDOWS}, "open": {"type": "boolean"}}),
+            "Open or close a window. `instrument` opens a channel's instrument window (pass `channel`).",
+            json!({"window": {"type": "string", "enum": windows}, "open": {"type": "boolean"}, "channel": ch}),
             &["window", "open"],
         ),
         tool(
@@ -360,6 +361,11 @@ impl App {
                     .ok_or_else(|| format!("unknown instrument `{ty}`; available: {:?}", soundesti_synthesis::INSTRUMENT_TYPES))?;
                 self.checkpoint("Add channel (AI)");
                 let id = self.project.add_channel(s(a, "name").unwrap_or(label), ty);
+                if ty == soundesti_synthesis::padz::TYPE_ID
+                    && let Some(c) = self.project.channel_mut(id)
+                {
+                    c.instrument.pads = crate::padz_ui::default_kit();
+                }
                 self.select_channel(id, false);
                 text(json!({"ok": true, "channel": id.0}))
             }
@@ -530,6 +536,15 @@ impl App {
             "playlist" => self.mcp_playlist(a),
             "browser" => self.mcp_browser(a),
             "plugins" => self.mcp_plugins(a),
+            "set_window" if s(a, "window") == Some("instrument") => {
+                let id = self.resolve_channel(a.get("channel"))?;
+                if b(a, "open").unwrap_or(true) {
+                    self.win.instruments.insert(id);
+                } else {
+                    self.win.instruments.remove(&id);
+                }
+                text(json!({"ok": true}))
+            }
             "set_window" => {
                 let open = b(a, "open").ok_or("missing `open`")?;
                 let w = &mut self.win;

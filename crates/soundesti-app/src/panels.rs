@@ -429,7 +429,13 @@ impl App {
             self.plugin_params_ui(ui, soundesti_session::PluginKey::Channel(id));
             return;
         }
-        if ch.instrument.type_id == soundesti_synthesis::sampler::TYPE_ID {
+        if ch.instrument.type_id == soundesti_synthesis::padz::TYPE_ID {
+            self.padz_ui(ui, id);
+            return;
+        }
+        if ch.instrument.type_id == soundesti_synthesis::sampler::TYPE_ID
+            || ch.instrument.type_id == soundesti_synthesis::chopper::TYPE_ID
+        {
             ui.horizontal(|ui| {
                 crate::icons::inline(ui, crate::icons::Icon::Wave, theme::rgb(ch.color));
                 match &ch.instrument.sample {
@@ -449,6 +455,15 @@ impl App {
                 }
             });
             ui.separator();
+        }
+        if let Some(params) =
+            self.preset_bar_for(ui, format!("ch{}", id.0), &ch.instrument.type_id, &ch.instrument.params)
+        {
+            self.checkpoint("Load preset");
+            if let Some(c) = self.project.channel_mut(id) {
+                c.instrument.params = params;
+            }
+            self.needs_sync = true;
         }
         let params = soundesti_session::instrument_params(&ch.instrument.type_id);
         let edit = crate::params_ui::param_grid(ui, id.0, params, &ch.instrument.params, theme::rgb(ch.color));

@@ -220,6 +220,13 @@ impl App {
                 self.needs_sync = true;
             }
         });
+        if let Some(p) = self.preset_bar_for(ui, format!("fx{track}.{slot}"), &fx.type_id, &fx.params) {
+            self.checkpoint("Load preset");
+            if let Some(e) = self.project.mixer[track].effect_mut(slot) {
+                e.params = p;
+            }
+            self.needs_sync = true;
+        }
         let edit = crate::params_ui::param_grid(ui, ("fx", track, slot), params, &fx.params, theme::ACCENT);
         if edit.started {
             self.checkpoint("Effect parameter");

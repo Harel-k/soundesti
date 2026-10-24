@@ -509,6 +509,20 @@ impl Session {
                 self.handle.send(Command::SetSample { slot, sample: data });
             }
         }
+        let pads_changed =
+            needs_new_instrument || existing.as_ref().is_some_and(|m| m.instrument.pads != ch.instrument.pads);
+        if pads_changed {
+            let before = existing.as_ref().map(|m| m.instrument.pads.clone()).unwrap_or_default();
+            let n = ch.instrument.pads.len().max(if needs_new_instrument { 0 } else { before.len() });
+            for index in 0..n {
+                let now = ch.instrument.pads.get(index).cloned().flatten();
+                let was = before.get(index).cloned().flatten();
+                if needs_new_instrument || now != was {
+                    let data = now.as_deref().and_then(|p| self.load_sample(p));
+                    self.handle.send(Command::SetSampleAt { slot, index, sample: data });
+                }
+            }
+        }
         let mirror = ChannelMirror {
             slot,
             instrument: ch.instrument.clone(),
