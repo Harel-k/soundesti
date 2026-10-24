@@ -162,13 +162,19 @@ pub struct App {
     started: bool,
     pub update: crate::updates::UpdateState,
     pub auto_update: bool,
+    /// Built-in MCP server for AI control (None = off).
+    pub mcp: Option<crate::mcp::McpServer>,
+    pub mcp_enabled: bool,
 }
+
+pub const MCP_KEY: &str = "soundesti.mcp";
 
 pub const RECENT_KEY: &str = "soundesti.recent";
 pub const AUDIO_KEY: &str = "soundesti.audio";
 
 impl App {
-    pub fn new(cc: &eframe::CreationContext<'_>, open_file: Option<PathBuf>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, open_file: Option<PathBuf>, force_mcp: bool) -> Self {
+        let mcp_enabled = force_mcp || cc.storage.and_then(|s| s.get_string(MCP_KEY)).is_some_and(|v| v == "true");
         theme::apply(&cc.egui_ctx);
         let auto_update =
             cc.storage.and_then(|s| s.get_string(crate::updates::AUTO_CHECK_KEY)).is_none_or(|v| v != "false");
@@ -242,8 +248,13 @@ impl App {
             started: false,
             update: crate::updates::UpdateState::Idle,
             auto_update,
+            mcp: None,
+            mcp_enabled: false,
             project,
         };
+        if mcp_enabled {
+            app.set_mcp(&cc.egui_ctx, true);
+        }
         if let Some(e) = &app.audio_error {
             app.status = format!("Audio device problem: {e}. Using {}.", app.output.info.device);
         }
@@ -255,6 +266,34 @@ impl App {
             app.check_for_updates(false);
         }
         app
+    }
+
+    /// Turns the built-in MCP server on or off.
+    pub fn set_mcp(&mut self, ctx: &egui::Context, on: bool) {
+        self.mcp = None;
+        self.mcp_enabled = on;
+        if !on {
+            self.set_status("AI control (MCP server) is off.");
+            return;
+        }
+        let port =
+            std::env::var("SOUNDESTI_MCP_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(crate::mcp::DEFAULT_PORT);
+        let wake = ctx.clone();
+        match crate::mcp::McpServer::start(port, move || wake.request_repaint()) {
+            Ok(srv) => {
+                self.set_status(format!("AI control on: MCP server at http://127.0.0.1:{port}/mcp (local only)."));
+                self.mcp = Some(srv);
+            }
+            Err(e) => {
+                self.mcp_enabled = false;
+                self.set_status(format!("Could not start the MCP server on port {port}: {e}"));
+            }
+        }
+    }
+
+    /// Command execution for the MCP server; returns false if not implemented.
+    pub fn execute_pub(&mut self, ctx: &egui::Context, cmd: Command, arg: Option<i32>) -> bool {
+        self.execute(ctx, cmd, arg)
     }
 
     // ----- model helpers -------------------------------------------------
@@ -848,6 +887,17 @@ impl App {
                 }
             });
             ui.menu_button("OPTIONS", |ui| {
+                let mut ai = self.mcp_enabled;
+                if ui
+                    .checkbox(&mut ai, "AI control (MCP server)")
+                    .on_hover_text(format!(
+                        "Lets AI assistants (Claude, etc.) control Soundesti through MCP at http://127.0.0.1:{}/mcp. Local only.",
+                        crate::mcp::DEFAULT_PORT
+                    ))
+                    .changed()
+                {
+                    self.set_mcp(&ctx, ai);
+                }
                 if ui.button("Audio settings…").clicked() {
                     self.device_names =
                         soundesti_audio_device::list_output_devices().into_iter().map(|d| d.name).collect();
@@ -928,6 +978,10 @@ impl App {
             };
             ui.label(RichText::new(format!("⌨ {focus}")).color(theme::ACCENT).monospace())
                 .on_hover_text("Keyboard focus: shortcuts for this window take priority");
+            if let Some(srv) = &self.mcp {
+                ui.label(RichText::new(format!("AI :{}", srv.port)).color(theme::ACCENT).monospace())
+                    .on_hover_text(format!("MCP server running at http://127.0.0.1:{}/mcp", srv.port));
+            }
             ui.separator();
             ui.label(RichText::new(&self.status).color(theme::TEXT_DIM));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1032,6 +1086,7 @@ impl eframe::App for App {
             self.started = true;
         }
         self.track_focus(&ctx);
+        self.process_mcp(&ctx);
         for (cmd, arg) in std::mem::take(&mut self.pending) {
             self.run(&ctx, cmd, arg);
         }
@@ -1084,5 +1139,6 @@ impl eframe::App for App {
             serde_json::to_string(&(&a.device, a.sample_rate, a.buffer_frames)).unwrap_or_default(),
         );
         storage.set_string(crate::updates::AUTO_CHECK_KEY, self.auto_update.to_string());
+        storage.set_string(MCP_KEY, self.mcp_enabled.to_string());
     }
 }

@@ -13,6 +13,7 @@ official manual; anything else is marked *to verify*.
 | B2 | Installer / updater | During auto-update the installer could start replacing `soundesti.exe` while the app was still closing → "file in use" failure | Failed updates | File replacement retries for up to 30 s while the file is locked |
 | B3 | App / updater | "Restart to update" launched the installer *before* the save prompt; cancelling the prompt left the installer racing an open app | Failed update, confusion | Installer launches only after quitting is confirmed (`AfterConfirm::QuitAndUpdate`) |
 | B4 | Piano roll | Paint tool advanced by the last note length; after resizing a note very short (snap off) one drag created hundreds of overlapping notes | Junk notes, CPU | Paint advances by at least one snap unit (¼ step without snap) |
+| B6 | MCP server (found while building it) | Answering a rejected request before reading its body made Windows reset the connection, so clients saw `connection reset` instead of the 403 | Confusing failures | Body is always read first; connection closed gracefully |
 | B5 | Toolbar (FL parity) | Song position used bar:beat:tick; FL shows **B:S:T** (bars:steps:ticks, 24 ticks/step) | Unfamiliar to FL users | New `BarStepTick` (tested), toolbar shows `1:01:00` style |
 
 Checked with no bug found: seek during held notes, channel removal while sounding,

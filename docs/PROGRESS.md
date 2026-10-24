@@ -31,7 +31,10 @@ Next: finish Phase 2 gaps, then Phase 3 (Playlist / song mode).
 
 | App icon (music note in a crystal), embedded in both exes, window/taskbar, shortcuts | rendered and reviewed at 16–256 px |
 
-**Automated tests: 107 passing** (`scripts\test.ps1`), plus 1 ignored real-device test (passing).
+| Bug hunt + FL 1:1 gap audit (docs/AUDIT.md): 6 bugs fixed (installer data loss, update races, paint flood, MCP socket reset, B:S:T clock), TOOLS menu, toolbar master volume | tests + manual checks |
+| **Built-in MCP server** (docs/MCP.md): 23 tools, all 193 commands, screenshots, local-only, off by default | 5 unit tests + live AI-style session 2026-10-24 |
+
+**Automated tests: 113 passing** (`scripts\test.ps1`), plus 1 ignored real-device test (passing).
 
 ## Not done / known gaps (honest list)
 - Playlist / song mode, pattern clips, arrangement (Phase 3) — placeholder window only.

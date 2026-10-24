@@ -1,4 +1,4 @@
-//! Save / open / recent files / autosave / WAV export jobs.
+﻿//! Save / open / recent files / autosave / WAV export jobs.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -41,7 +41,7 @@ fn with_extension(mut p: PathBuf, ext: &str) -> PathBuf {
     p
 }
 
-/// `song.soundesti` → `song_2.soundesti`, `song_2` → `song_3`, skipping existing files.
+/// `song.soundesti` â†’ `song_2.soundesti`, `song_2` â†’ `song_3`, skipping existing files.
 pub fn next_version_path(path: &Path) -> PathBuf {
     let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let (base, mut n) = match stem.rsplit_once('_') {
@@ -76,7 +76,7 @@ impl App {
         if self.project.meta.title.is_empty() { "Untitled".into() } else { self.project.meta.title.clone() }
     }
 
-    fn save_to(&mut self, path: PathBuf) -> bool {
+    pub fn save_to(&mut self, path: PathBuf) -> bool {
         match soundesti_project::save(&self.project, &path) {
             Ok(()) => {
                 self.saved_revision = self.revision;

@@ -4,6 +4,8 @@ mod app;
 mod channel_rack;
 mod files;
 mod input;
+mod mcp;
+mod mcp_tools;
 mod mixer;
 mod panels;
 mod piano_roll;
@@ -26,7 +28,10 @@ fn main() -> eframe::Result {
             ),
         ..Default::default()
     };
-    // A project path as the first argument opens it (used by the .soundesti file association).
-    let open_file = std::env::args_os().nth(1).map(std::path::PathBuf::from).filter(|p| p.exists());
-    eframe::run_native("Soundesti", options, Box::new(move |cc| Ok(Box::new(app::App::new(cc, open_file)))))
+    // `--mcp` turns on AI control at startup; any existing file path argument is opened
+    // (the .soundesti file association passes the project path).
+    let args: Vec<std::path::PathBuf> = std::env::args_os().skip(1).map(std::path::PathBuf::from).collect();
+    let force_mcp = args.iter().any(|a| a.as_os_str() == "--mcp");
+    let open_file = args.into_iter().find(|p| p.exists());
+    eframe::run_native("Soundesti", options, Box::new(move |cc| Ok(Box::new(app::App::new(cc, open_file, force_mcp)))))
 }

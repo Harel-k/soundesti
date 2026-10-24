@@ -27,6 +27,8 @@ soundesti-shortcuts.workspace = true
 soundesti-synthesis.workspace = true
 soundesti-timeline.workspace = true
 soundesti-updater = { path = "../soundesti-updater" }
+# Same version eframe already uses (PNG encoding for the MCP screenshot tool).
+image = { version = "0.25", default-features = false, features = ["png"] }
 eframe.workspace = true
 egui.workspace = true
 rfd.workspace = true

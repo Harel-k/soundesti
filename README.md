@@ -13,6 +13,8 @@ built from scratch with original code, instruments and artwork.
 - **Trident** — an original 3-oscillator subtractive synth.
 - Save/open `.soundesti` projects (atomic saves, backups, autosave), WAV export (16/24/32-bit).
 - 276 FL Studio shortcuts loaded from a machine-readable profile; 147 implemented so far.
+- **AI control:** a built-in MCP server lets Claude and other AI assistants drive every command in the app ([docs/MCP.md](docs/MCP.md)).
+- Installer Wizard with repair / update / uninstall, and automatic updates from GitHub Releases.
 
 ## Build
 Windows 11, Rust (pinned in `rust-toolchain.toml`), Visual Studio C++ build tools + Windows SDK.
