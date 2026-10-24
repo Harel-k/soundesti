@@ -34,7 +34,7 @@ installer repair/upgrade file cleanup, update tamper rejection.
 | Sampler channels + Browser | Drag samples from the Browser into the Channel Rack / Playlist (verified: Browser shortcuts exist) | **Done**: Sampler + Browser (preview, double-click, Enter, drag to rack) + bundled original pack; Playlist audio drops missing |
 | Mixer routing & effects | 10 effect slots per insert, routing to any insert, sends, sidechain | **Effects done** (10 slots, 9 effects, bypass, reorder); routing/sends/sidechain missing |
 | Automation clips | Automate any parameter from the Playlist | Missing |
-| Audio recording | R toggles recording (verified) | Missing |
+| Audio recording | R toggles recording (verified) | **Done** for notes (into the pattern) and audio (into a Sampler channel); no Playlist audio clips or latency compensation yet |
 | Plugin hosting | VST3/CLAP (verified: compare page) | **Done**: VST2, VST3 and CLAP instruments and effects with editors and saved settings; no sandbox, automation or multi-out yet |
 | FL project files | Open .flp | **Import done** (patterns, notes, channels, Playlist, tempo); automation/audio clips, mixer and FL plugin sounds not imported |
 

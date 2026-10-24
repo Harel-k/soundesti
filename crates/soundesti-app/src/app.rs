@@ -146,6 +146,7 @@ pub struct App {
     pub playlist: crate::playlist::PlaylistView,
     pub browser: crate::browser::BrowserView,
     pub plugins: crate::plugins::PluginUi,
+    pub live: crate::live::LiveInput,
     /// Plugin editor to open once the next sync has started the plugin.
     pub pending_editor: Option<soundesti_session::PluginKey>,
     pub selected_track: usize,
@@ -244,6 +245,9 @@ impl App {
             browser: crate::browser::BrowserView::new(),
             plugins: crate::plugins::PluginUi::new(crate::plugins::main_window_handle(cc)),
             pending_editor: None,
+            live: crate::live::LiveInput::new(
+                cc.storage.and_then(|s| s.get_string(crate::live::MIDI_PORT_KEY)).filter(|p| !p.is_empty()),
+            ),
             selected_track: 1,
             track_meters: vec![MeterState::default(); soundesti_audio::MIXER_TRACKS],
             channel_meters: vec![MeterState::default(); 256],
@@ -288,6 +292,12 @@ impl App {
         }
         if app.auto_update {
             app.check_for_updates(false);
+        }
+        // Reconnect the MIDI keyboard used last time (silently skipped if unplugged).
+        if let Some(port) = app.live.midi_port.clone()
+            && crate::live::midi_ports().contains(&port)
+        {
+            app.connect_midi(&cc.egui_ctx, Some(port));
         }
         app
     }
@@ -428,14 +438,12 @@ impl App {
 
     fn typing_note(&mut self, key: soundesti_shortcuts::Key, down: bool) {
         if down {
-            let (Some(ch), Some(off)) = (self.selected_channel, typing_piano_offset(key)) else { return };
+            let Some(off) = typing_piano_offset(key) else { return };
             let note = (self.typing_octave * 12 + off).clamp(0, 127) as u8;
-            if let Some(slot) = self.session.slot_of(ch) {
-                self.session.send(EngineCmd::NoteOn { slot, key: note, velocity: soundesti_project::DEFAULT_VELOCITY });
-                self.typing_held.insert(key, (slot, note));
-            }
-        } else if let Some((slot, note)) = self.typing_held.remove(&key) {
-            self.session.send(EngineCmd::NoteOff { slot, key: note });
+            self.typing_held.insert(key, (0, note));
+            self.live_note_on(note, soundesti_project::DEFAULT_VELOCITY);
+        } else if let Some((_, note)) = self.typing_held.remove(&key) {
+            self.live_note_off(note);
         }
     }
 
@@ -505,7 +513,7 @@ impl App {
                     "Pattern mode: looping the current pattern"
                 });
             }
-            ToggleRecord => self.set_status("Recording is not implemented yet (Phase 5)."),
+            ToggleRecord => self.toggle_record(),
             ToggleMetronome => {
                 self.checkpoint("Metronome");
                 self.project.metronome = !self.project.metronome;
@@ -744,9 +752,9 @@ impl App {
             if icons::button(ui, icons::Icon::Stop, false, "Stop").clicked() {
                 self.session.send(EngineCmd::Stop);
             }
-            ui.add_enabled_ui(false, |ui| icons::button(ui, icons::Icon::Record, false, "Recording (R)"))
-                .response
-                .on_disabled_hover_text("Audio recording is not available yet");
+            if icons::button(ui, icons::Icon::Record, self.live.armed, "Record (R): notes you play while playing; audio too if enabled in MIDI settings (F10)").clicked() {
+                self.toggle_record();
+            }
             ui.separator();
 
             let mut bpm = self.project.bpm;
@@ -1286,6 +1294,7 @@ impl eframe::App for App {
             self.session.handle().collect_garbage();
         }
         self.tick_plugins();
+        self.tick_live();
         self.update_title(&ctx);
 
         let playing = self.shared.playing.load(Ordering::Relaxed);
@@ -1304,6 +1313,7 @@ impl eframe::App for App {
         );
         storage.set_string(crate::updates::AUTO_CHECK_KEY, self.auto_update.to_string());
         storage.set_string(MCP_KEY, self.mcp_enabled.to_string());
+        storage.set_string(crate::live::MIDI_PORT_KEY, self.live.midi_port.clone().unwrap_or_default());
     }
 }
 

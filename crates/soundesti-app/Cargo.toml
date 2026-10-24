@@ -29,6 +29,10 @@ soundesti-effects.workspace = true
 soundesti-flp.workspace = true
 soundesti-plugin-host.workspace = true
 raw-window-handle = "0.6"
+midir = "0.11"
+cpal.workspace = true
+rtrb.workspace = true
+hound.workspace = true
 soundesti-timeline.workspace = true
 soundesti-updater = { path = "../soundesti-updater" }
 # Same version eframe already uses (PNG encoding for the MCP screenshot tool).

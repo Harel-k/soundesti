@@ -4,7 +4,7 @@
 
 Source: [FL Studio manual - shortcuts](https://www.image-line.com/fl-studio-learning-content/fl-studio-online-manual/html/basics_shortcuts.htm), fetched 2026-10-24. Every keyboard row on that page is present; mouse gestures are tracked in MOUSE_GESTURES.md.
 
-**Totals (276 bindings):** BLOCKED: 17 | IMPLEMENTED: 131 | PARTIAL: 1 | PLANNED: 102 | TESTED: 25
+**Totals (276 bindings):** BLOCKED: 17 | IMPLEMENTED: 133 | PLANNED: 101 | TESTED: 25
 
 Automated coverage: `soundesti-shortcuts` tests load this profile, reject conflicts, assert every row resolves to its own command in its context, check the master prompt's mandatory mappings, text-field suppression and typing-keyboard suppression.
 
@@ -59,7 +59,7 @@ Automated coverage: `soundesti-shortcuts` tests load this profile, reject confli
 | `Num*` | `transport.next_bar` |  | Transport | PLANNED |
 | `Num/` | `transport.previous_bar` |  | Transport | PLANNED |
 | `L` | `transport.toggle_song_mode` |  | Transport | TESTED |
-| `R` | `transport.toggle_record` |  | Transport | PLANNED |
+| `R` | `transport.toggle_record` |  | Transport | IMPLEMENTED |
 | `Backspace` | `snap.toggle_none` |  | Transport | IMPLEMENTED |
 | `Space` | `transport.play_stop` |  | Transport | TESTED |
 | `Ctrl+B` | `transport.toggle_blend_notes` |  | Transport | PLANNED |
@@ -78,7 +78,7 @@ Automated coverage: `soundesti-shortcuts` tests load this profile, reject confli
 | `F7` | `view.toggle_piano_roll` |  | Window Navigation | IMPLEMENTED |
 | `F8` | `view.plugin_picker` |  | Window Navigation | IMPLEMENTED |
 | `F9` | `view.toggle_mixer` |  | Window Navigation | IMPLEMENTED |
-| `F10` | `view.toggle_midi_settings` |  | Window Navigation | PARTIAL |
+| `F10` | `view.toggle_midi_settings` |  | Window Navigation | IMPLEMENTED |
 | `F11` | `view.toggle_song_info` |  | Window Navigation | IMPLEMENTED |
 | `F12` | `view.close_all` |  | Window Navigation | IMPLEMENTED |
 | `Tab` | `view.cycle_windows` |  | Window Navigation | IMPLEMENTED |

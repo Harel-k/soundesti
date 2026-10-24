@@ -75,13 +75,10 @@ impl App {
         self.win.song_info = open;
 
         let mut open = self.win.midi_settings;
-        egui::Window::new("MIDI settings").id(Id::unique("w_midi")).open(&mut open).show(ctx, |ui| {
-            not_yet(
-                ui,
-                "MIDI device input/output is Phase 5.",
-                "Use Typing keyboard to piano (Ctrl+T) to play instruments from the computer keyboard.",
-            );
-        });
+        egui::Window::new("MIDI settings")
+            .id(Id::unique("w_midi"))
+            .open(&mut open)
+            .show(ctx, |ui| self.midi_settings_ui(ui));
         self.win.midi_settings = open;
 
         let mut open = self.win.audio_settings;
@@ -540,14 +537,6 @@ fn rename_field(ui: &mut Ui, text: &mut String) -> Option<bool> {
         }
     });
     out
-}
-
-fn not_yet(ui: &mut Ui, what: &str, meanwhile: &str) {
-    ui.add_space(8.0);
-    ui.label(RichText::new(format!("⚠ {what}")).color(theme::WARN));
-    ui.label(RichText::new(meanwhile).color(theme::TEXT_DIM));
-    ui.add_space(8.0);
-    ui.allocate_space(vec2(ui.available_width(), 0.0));
 }
 
 fn context_name(c: Context) -> &'static str {

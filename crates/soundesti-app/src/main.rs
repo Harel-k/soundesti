@@ -7,6 +7,7 @@ mod channel_rack;
 mod files;
 mod icons;
 mod input;
+mod live;
 mod mcp;
 mod mcp_tools;
 mod mixer;

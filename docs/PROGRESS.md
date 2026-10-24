@@ -42,13 +42,15 @@ Next: automation clips, insert-to-insert routing and sends, piano-roll tool suit
 | **FL-style docked layout**: Browser docked left (resizable), Playlist fills the workspace, floating windows stay inside it, toolbar window buttons, focused-caption highlight | visual check 2026-10-24 |
 | **FL Studio project import** (.flp, FL 9 to FL 2025): tempo, time signature, channels (name, color, volume, pan, mute, insert), patterns + notes (velocity, pan, release, fine pitch), Playlist pattern clips + track names/colors, samples resolved from FL's folders or next to the project; FL plugins mapped to the closest Soundesti instrument; grouped import report | 7 tests (synthetic files, fuzzed truncation); all 46 FL Studio 2026 demo projects import without errors |
 | **Third-party plugins: VST2, VST3, CLAP** — plugin manager (OPTIONS > Manage plugins) with crash-isolated scanning and cache; plugins as Channel Rack instruments and mixer effects; their own editor windows; parameters; settings saved in projects; missing plugins reported and silent; FL Studio VSTi brings FL's own instruments/effects in | host tests incl. a CLAP round trip with a bundled test synth; manual checks 2026-10-24 with FL Studio VSTi (VST2), Elgato EQ/Compressor/Noise Removal and Voicemod Mr. Meowington (VST3): scan, sound, editor, save + reopen, remove, quit |
+| **MIDI keyboard input** (MIDI settings, F10): any MIDI input device plays the selected channel; the device is remembered | builds; not yet tried with a hardware keyboard (none on the dev PC) |
+| **Recording** (R / record button): notes from the MIDI or typing keyboard are recorded into the current pattern (one undo step per pass, loop-aware); optional audio recording from the default input into a new Sampler channel placed where the take started | recording-position unit test; audio capture not yet tried on hardware |
 | **AI assistant setup** window (HELP menu): exact steps + Copy + one-click setup for Claude Code, Codex, Cursor, VS Code, Windsurf, Gemini CLI, Claude Desktop; built-in `--mcp-stdio` bridge | 4 unit tests; live bridge test with app auto-launch |
 
 **Automated tests: 152 passing** (`scripts\test.ps1`), plus 1 ignored real-device test (passing).
 
 ## Not done / known gaps (honest list)
 - Playlist: no audio or automation clips, time markers, performance mode or clip-level transpose yet; song export renders the pattern only.
-- Recording, audio clips, MIDI devices, MIDI import/export (Phase 5).
+- Audio clips in the Playlist (recordings become Sampler channels instead), recording latency compensation, MIDI output, MIDI import/export.
 - Mixer: sends, insert-to-insert routing, sidechain, PDC and automation are not implemented; effects have generic knob panels (no custom graphical editors yet).
 - .flp import: automation clips, audio clips, mixer settings/effects and FL plugin sounds are not imported (FL's plugin data is private).
 - Plugins run inside Soundesti's process (no sandbox yet): a crashing plugin closes Soundesti. No plugin automation, sidechain or multi-output routing yet; plugin settings are not part of undo. FLAC/MP3 export. Browser shows WAV only (no presets, projects or plugin database).

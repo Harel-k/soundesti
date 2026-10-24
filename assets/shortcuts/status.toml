@@ -24,7 +24,7 @@
 "transport.playhead_to_start" = "IMPLEMENTED"
 "transport.toggle_typing_keyboard" = "TESTED"  # shortcut suppression tests
 "transport.toggle_song_mode" = "TESTED"   # song_mode_plays_playlist_clips (session)
-"transport.toggle_record" = "PLANNED"
+"transport.toggle_record" = "IMPLEMENTED"      # notes into the pattern; audio into a Sampler channel
 "typing.octave" = "BLOCKED"               # numpad keys indistinguishable (KI-002)
 "snap.toggle_none" = "IMPLEMENTED"
 "snap.toggle_global" = "IMPLEMENTED"
@@ -33,7 +33,7 @@
 "view.toggle_mixer" = "IMPLEMENTED"
 "view.toggle_playlist" = "IMPLEMENTED"
 "view.toggle_browser" = "IMPLEMENTED"
-"view.toggle_midi_settings" = "PARTIAL"   # placeholder window
+"view.toggle_midi_settings" = "IMPLEMENTED"
 "view.plugin_picker" = "IMPLEMENTED"
 "view.toggle_song_info" = "IMPLEMENTED"
 "help.open" = "IMPLEMENTED"
