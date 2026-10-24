@@ -113,7 +113,7 @@ impl Drop for EditorWindow {
     }
 }
 
-fn set_client_size(hwnd: isize, w: i32, h: i32) {
+pub fn set_client_size(hwnd: isize, w: i32, h: i32) {
     let mut r = RECT { left: 0, top: 0, right: w.max(50), bottom: h.max(30) };
     unsafe {
         AdjustWindowRectEx(&mut r, STYLE, 0, WS_EX_TOOLWINDOW);

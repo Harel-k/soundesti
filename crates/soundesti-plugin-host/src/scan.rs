@@ -15,7 +15,7 @@ use crate::{PluginDesc, PluginFormat};
 pub const SCAN_FLAG: &str = "--scan-plugin";
 const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bump when the scanner learns new formats, so old `not supported` results are redone.
-pub const SCANNER_VERSION: u32 = 1;
+pub const SCANNER_VERSION: u32 = 2;
 
 /// The standard plugin folders on Windows, plus FL Studio's VSTi folder when FL is installed.
 pub fn default_dirs() -> Vec<(PluginFormat, PathBuf)> {

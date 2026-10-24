@@ -10,6 +10,7 @@ soundesti-plugin-api.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 libloading = "0.8"
+vst3 = "0.3"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",

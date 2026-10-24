@@ -12,6 +12,7 @@
 pub mod editor;
 pub mod scan;
 mod vst2;
+mod vst3;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -121,9 +122,11 @@ pub fn load(desc: &PluginDesc, sample_rate: f32) -> Result<Arc<dyn PluginInstanc
             ANY_LOADED.store(true, std::sync::atomic::Ordering::Relaxed);
             Ok(Arc::new(vst2::Vst2Plugin::load(desc, sample_rate)?))
         }
-        PluginFormat::Vst3 | PluginFormat::Clap => {
-            Err(HostError::NotAPlugin(format!("{} hosting is not available yet", desc.format.label())))
+        PluginFormat::Vst3 => {
+            ANY_LOADED.store(true, std::sync::atomic::Ordering::Relaxed);
+            Ok(Arc::new(vst3::Vst3Plugin::load(desc, sample_rate)?))
         }
+        PluginFormat::Clap => Err(HostError::NotAPlugin("CLAP hosting is not available yet".into())),
     }
 }
 
@@ -131,9 +134,8 @@ pub fn load(desc: &PluginDesc, sample_rate: f32) -> Result<Arc<dyn PluginInstanc
 pub fn describe(format: PluginFormat, path: &Path) -> Result<Vec<PluginDesc>, HostError> {
     match format {
         PluginFormat::Vst2 => vst2::describe(path).map(|d| vec![d]),
-        PluginFormat::Vst3 | PluginFormat::Clap => {
-            Err(HostError::NotAPlugin(format!("{} hosting is not available yet", format.label())))
-        }
+        PluginFormat::Vst3 => vst3::describe(path),
+        PluginFormat::Clap => Err(HostError::NotAPlugin("CLAP hosting is not available yet".into())),
     }
 }
 
