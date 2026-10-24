@@ -3718,7 +3718,7 @@ dependencies = [
 
 [[package]]
 name = "soundesti-app"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "eframe",
  "egui",
@@ -3734,6 +3734,7 @@ dependencies = [
  "soundesti-dsp",
  "soundesti-effects",
  "soundesti-export",
+ "soundesti-flp",
  "soundesti-plugin-api",
  "soundesti-project",
  "soundesti-session",
@@ -3747,7 +3748,7 @@ dependencies = [
 
 [[package]]
 name = "soundesti-audio"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "rtrb",
  "soundesti-dsp",
@@ -3758,7 +3759,7 @@ dependencies = [
 
 [[package]]
 name = "soundesti-audio-device"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cpal",
  "log",
@@ -3768,18 +3769,18 @@ dependencies = [
 
 [[package]]
 name = "soundesti-commands"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "soundesti-dsp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "soundesti-effects"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "soundesti-dsp",
  "soundesti-plugin-api",
@@ -3787,7 +3788,7 @@ dependencies = [
 
 [[package]]
 name = "soundesti-export"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "hound",
  "soundesti-audio",
@@ -3798,8 +3799,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "soundesti-flp"
+version = "0.4.0"
+dependencies = [
+ "soundesti-project",
+ "soundesti-timeline",
+]
+
+[[package]]
 name = "soundesti-installer"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "eframe",
  "egui",
@@ -3814,11 +3823,11 @@ dependencies = [
 
 [[package]]
 name = "soundesti-plugin-api"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "soundesti-project"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "proptest",
  "serde",
@@ -3829,7 +3838,7 @@ dependencies = [
 
 [[package]]
 name = "soundesti-session"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "hound",
  "soundesti-audio",
@@ -3842,7 +3851,7 @@ dependencies = [
 
 [[package]]
 name = "soundesti-shortcuts"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "soundesti-commands",
@@ -3852,7 +3861,7 @@ dependencies = [
 
 [[package]]
 name = "soundesti-synthesis"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "soundesti-dsp",
  "soundesti-plugin-api",
@@ -3860,7 +3869,7 @@ dependencies = [
 
 [[package]]
 name = "soundesti-timeline"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "proptest",
  "serde",
@@ -3868,7 +3877,7 @@ dependencies = [
 
 [[package]]
 name = "soundesti-updater"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "semver",
  "serde",

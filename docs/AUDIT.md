@@ -30,12 +30,13 @@ installer repair/upgrade file cleanup, update tamper rejection.
 | Gap | FL behaviour | Status |
 |---|---|---|
 | Playlist + song mode | Arrange pattern/audio/automation clips on tracks; L switches PAT/SONG (verified: shortcut page) | **Done** for pattern clips (tools, move/resize/slice, song mode); audio/automation clips missing |
-| Default project content | New project opens with a small drum kit of sample channels (*to verify exact template*) | **Done**: Kick/Clap/Hat/Snare with a starter beat |
+| Default project content | New project opens with a small drum kit of sample channels (*to verify exact template*) | **Done**: Kick/Clap/Hat/Snare channels with empty steps |
 | Sampler channels + Browser | Drag samples from the Browser into the Channel Rack / Playlist (verified: Browser shortcuts exist) | **Done**: Sampler + Browser (preview, double-click, Enter, drag to rack) + bundled original pack; Playlist audio drops missing |
 | Mixer routing & effects | 10 effect slots per insert, routing to any insert, sends, sidechain | **Effects done** (10 slots, 9 effects, bypass, reorder); routing/sends/sidechain missing |
 | Automation clips | Automate any parameter from the Playlist | Missing |
 | Audio recording | R toggles recording (verified) | Missing |
 | Plugin hosting | VST3/CLAP (verified: compare page) | Missing |
+| FL project files | Open .flp | **Import done** (patterns, notes, channels, Playlist, tempo); automation/audio clips, mixer and FL plugin sounds not imported |
 
 ### P1 — editors that exist but are incomplete
 | Gap | FL behaviour (verified unless marked) | Status |
@@ -53,7 +54,7 @@ installer repair/upgrade file cleanup, update tamper rejection.
 ### P2 — main window, polish
 | Gap | FL behaviour | Status |
 |---|---|---|
-| Docked default layout | Browser on the left, Playlist behind, Channel Rack floating | Floating windows only |
+| Docked default layout | Browser on the left, Playlist behind, Channel Rack floating | **Done**: Browser docked left (resizable), Playlist fills the workspace, floating windows stay inside it, toolbar window buttons |
 | Toolbar | Master pitch, oscilloscope/output monitor, memory meter, record/countdown buttons, snap selector by panel | Partial (master volume added; CPU, BPM, B:S:T, snap) |
 | Undo history window | Edit menu history list | Missing (history exists internally) |
 | Detached windows, workspaces, multi-monitor | Window layouts | Missing |

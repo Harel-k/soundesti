@@ -188,7 +188,7 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "open_project",
-            "Open a .soundesti project. Fails if there are unsaved changes unless discard_unsaved is true.",
+            "Open a .soundesti project, or import an FL Studio .flp project (tempo, channels, patterns, notes, Playlist; FL plugins become the closest Soundesti instruments; result is unsaved). Fails if there are unsaved changes unless discard_unsaved is true.",
             json!({"path": {"type": "string"}, "discard_unsaved": {"type": "boolean"}}),
             &["path"],
         ),

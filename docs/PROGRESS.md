@@ -39,14 +39,17 @@ Next: automation clips, insert-to-insert routing and sends, piano-roll tool suit
 | **Browser** (Alt+F8): folder tree (bundled packs, Music, Downloads, Desktop, Documents, user folders), search, click-to-preview, double-click = new channel, Enter = replace selected channel, Shift+Up/Down preview stepping, drag onto Channel Rack rows | preview test + listing test |
 | **Soundesti Essentials** sample pack: 32 original one-shots rendered from Soundesti's own instruments/effects (`cargo run -p soundesti-session --example make_pack`), installed to `Packs\` | renders reproducibly |
 | **Vector icons** everywhere (no emoji or font glyphs) | visual check |
+| **FL-style docked layout**: Browser docked left (resizable), Playlist fills the workspace, floating windows stay inside it, toolbar window buttons, focused-caption highlight | visual check 2026-10-24 |
+| **FL Studio project import** (.flp, FL 9 to FL 2025): tempo, time signature, channels (name, color, volume, pan, mute, insert), patterns + notes (velocity, pan, release, fine pitch), Playlist pattern clips + track names/colors, samples resolved from FL's folders or next to the project; FL plugins mapped to the closest Soundesti instrument; grouped import report | 7 tests (synthetic files, fuzzed truncation); all 46 FL Studio 2026 demo projects import without errors |
 | **AI assistant setup** window (HELP menu): exact steps + Copy + one-click setup for Claude Code, Codex, Cursor, VS Code, Windsurf, Gemini CLI, Claude Desktop; built-in `--mcp-stdio` bridge | 4 unit tests; live bridge test with app auto-launch |
 
-**Automated tests: 145 passing** (`scripts\test.ps1`), plus 1 ignored real-device test (passing).
+**Automated tests: 152 passing** (`scripts\test.ps1`), plus 1 ignored real-device test (passing).
 
 ## Not done / known gaps (honest list)
 - Playlist: no audio or automation clips, time markers, performance mode or clip-level transpose yet; song export renders the pattern only.
 - Recording, audio clips, MIDI devices, MIDI import/export (Phase 5).
 - Mixer: sends, insert-to-insert routing, sidechain, PDC and automation are not implemented; effects have generic knob panels (no custom graphical editors yet).
+- .flp import: automation clips, audio clips, mixer settings/effects and FL plugin sounds are not imported (FL's plugin data is private).
 - CLAP/VST3 hosting (Phase 6). FLAC/MP3 export. Browser shows WAV only (no presets, projects or plugin database).
 - Numpad and left/right-modifier shortcuts blocked by egui input (KI-002).
 - Piano roll: no chord/scale tools, arpeggiator, strum, chop, LFO, randomizer yet; no per-note pan/fine-pitch lanes.

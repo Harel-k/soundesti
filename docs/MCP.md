@@ -57,7 +57,7 @@ Quick manual test: `scripts\mcp-call.ps1 get_state`.
 | `browser` | List bundled or local WAVs, preview one, load into a new or existing channel |
 | `pattern` | select / new / rename |
 | `set_window` | Open/close any window |
-| `save_project`, `open_project`, `new_project` | Files (`.soundesti` only; refuses to discard unsaved work unless told) |
+| `save_project`, `open_project`, `new_project` | Files: `.soundesti` projects; `open_project` also imports FL Studio `.flp` files. Refuses to discard unsaved work unless told |
 | `export_wav` | Render the pattern to WAV (runs in the background) |
 | `screenshot` | PNG of the window (≤1600 px wide) |
 

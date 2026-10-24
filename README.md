@@ -14,6 +14,8 @@ built from scratch with original code, instruments and artwork.
 - **Mixer**: master + 125 inserts with faders, pan, mute, solo, meters and **10 insert effect slots** per track.
 - **Instruments** (all original): Sampler, Kickr, Clapper, Hatz, Orbit (FM), Harpa (plucked string), Trident (subtractive).
 - **Effects** (all original): EQ, Filter, Compressor, Limiter, Delay, Reverb, Chorus, Distortion, Utility.
+- **FL Studio project import** (.flp): tempo, channels, patterns, notes and the Playlist come across; FL's own plugins become the closest Soundesti instruments.
+- FL-style layout: Browser docked on the left, Playlist filling the workspace.
 - **Browser** with click-to-preview and drag-to-Channel-Rack, plus the bundled *Soundesti Essentials* pack of 32 original one-shots.
 - Save/open `.soundesti` projects (atomic saves, backups, autosave), WAV export (16/24/32-bit).
 - 276 FL Studio shortcuts loaded from a machine-readable profile; 156 implemented so far.

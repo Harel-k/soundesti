@@ -37,6 +37,8 @@ pub enum Icon {
     Dot,
     ArrowRight,
     ArrowDown,
+    Mixer,
+    Rack,
     Song,
     Pattern,
 }
@@ -211,6 +213,26 @@ pub fn paint(painter: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {
         }
         Icon::ArrowRight => {
             fill(vec![p(0.35, 0.25), p(0.7, 0.5), p(0.35, 0.75)]);
+        }
+        Icon::Mixer => {
+            for (x, k) in [(0.25, 0.62), (0.5, 0.35), (0.75, 0.55)] {
+                line(vec![p(x, 0.15), p(x, 0.85)], thin);
+                painter.rect_filled(Rect::from_center_size(p(x, k), vec2(0.16 * s, 0.1 * s)), 1.0, color);
+            }
+        }
+        Icon::Rack => {
+            for row in 0..3 {
+                let y = 0.22 + row as f32 * 0.22;
+                for col in 0..4 {
+                    let x = 0.14 + col as f32 * 0.19;
+                    let r = Rect::from_min_size(p(x, y), vec2(0.14 * s, 0.14 * s));
+                    if (row + col) % 3 == 0 {
+                        painter.rect_filled(r, 1.0, color);
+                    } else {
+                        painter.rect_stroke(r, 1.0, thin, egui::StrokeKind::Inside);
+                    }
+                }
+            }
         }
         Icon::ArrowDown => {
             fill(vec![p(0.25, 0.35), p(0.75, 0.35), p(0.5, 0.7)]);

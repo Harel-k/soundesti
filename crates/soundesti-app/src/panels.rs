@@ -10,24 +10,15 @@ use crate::theme;
 
 impl App {
     pub fn windows(&mut self, ctx: &egui::Context) {
-        // Created first so it starts behind the other windows (FL's layout).
-        let mut open = self.win.playlist;
-        let r = egui::Window::new("Playlist - Arrangement")
-            .id(Id::unique("w_playlist"))
-            .open(&mut open)
-            .default_pos([8.0, 84.0])
-            .default_size([1560.0, 760.0])
-            .scroll(false)
-            .resizable(true)
-            .show(ctx, |ui| self.playlist_ui(ui));
-        self.win.playlist = open;
-        self.register_window(&r, Context::Playlist);
-
+        // The Playlist and Browser are docked (see App::ui); these float over the workspace.
+        let ws = self.workspace;
+        let at = |x: f32, y: f32| ws.min + vec2(x, y);
         let mut open = self.win.channel_rack;
         let r = egui::Window::new("Channel rack")
             .id(Id::unique("w_rack"))
             .open(&mut open)
-            .default_pos([260.0, 170.0])
+            .constrain_to(ws)
+            .default_pos(at(60.0, 70.0))
             .default_size([720.0, 220.0])
             .show(ctx, |ui| self.channel_rack_ui(ui));
         self.win.channel_rack = open;
@@ -41,7 +32,8 @@ impl App {
         let r = egui::Window::new(title)
             .id(Id::unique("w_piano"))
             .open(&mut open)
-            .default_pos([120.0, 340.0])
+            .constrain_to(ws)
+            .default_pos(at(140.0, 160.0))
             .default_size([980.0, 470.0])
             .scroll(false)
             .resizable(true)
@@ -53,21 +45,12 @@ impl App {
         let r = egui::Window::new("Mixer")
             .id(Id::unique("w_mixer"))
             .open(&mut open)
-            .default_pos([300.0, 120.0])
-            .default_size([900.0, 300.0])
+            .constrain_to(ws)
+            .default_pos(at(20.0, (ws.height() - 380.0).max(40.0)))
+            .default_size([(ws.width() - 40.0).max(600.0), 340.0])
             .show(ctx, |ui| self.mixer_ui(ui));
         self.win.mixer = open;
         self.register_window(&r, Context::Mixer);
-
-        let mut open = self.win.browser;
-        let r = egui::Window::new("Browser")
-            .id(Id::unique("w_browser"))
-            .open(&mut open)
-            .default_pos([8.0, 84.0])
-            .default_size([260.0, 620.0])
-            .show(ctx, |ui| self.browser_ui(ui));
-        self.win.browser = open;
-        self.register_window(&r, Context::Browser);
 
         let mut open = self.win.plugin_picker;
         egui::Window::new("Plugin picker")
@@ -159,7 +142,8 @@ impl App {
             egui::Window::new(format!("{name} ({inst_name})"))
                 .id(Id::unique(("w_inst", id.0)))
                 .open(&mut open)
-                .default_pos([420.0, 140.0])
+                .constrain_to(ws)
+                .default_pos(at(420.0, 60.0))
                 .resizable(false)
                 .show(ctx, |ui| self.instrument_ui(ui, id));
             if !open {
@@ -179,7 +163,8 @@ impl App {
             egui::Window::new(format!("{name} - {} slot {}", self.project.mixer[track].name, slot + 1))
                 .id(Id::unique(("w_fx", track, slot)))
                 .open(&mut open)
-                .default_pos([520.0, 200.0])
+                .constrain_to(ws)
+                .default_pos(at(520.0, 120.0))
                 .resizable(false)
                 .show(ctx, |ui| self.effect_ui(ui, track, slot));
             if !open {

@@ -107,6 +107,8 @@ pub enum Dialog {
 pub enum AfterConfirm {
     New,
     Open(Option<PathBuf>),
+    /// File › Import › FL Studio project.
+    ImportFlp,
     Quit,
     /// Quit, then run the downloaded installer in update mode.
     QuitAndUpdate(PathBuf),
@@ -133,6 +135,10 @@ pub struct App {
 
     pub win: Windows,
     window_layers: HashMap<LayerId, Context>,
+    /// Docked areas (Browser, Playlist) from the last frame, for click-to-focus.
+    docked: Vec<(egui::Rect, Context)>,
+    /// Area between the docked Browser and the screen edges; floating windows stay inside it.
+    pub workspace: egui::Rect,
     pub selected_channel: Option<ChannelId>,
     pub selected_channels: BTreeSet<ChannelId>,
     pub piano: PianoRoll,
@@ -223,8 +229,10 @@ impl App {
             device_names: soundesti_audio_device::list_output_devices().into_iter().map(|d| d.name).collect(),
             audio_error: err.map(|e| e.to_string()),
             // FL's default layout: Playlist in the background, Channel Rack floating on top.
-            win: Windows { channel_rack: true, playlist: true, ..Default::default() },
+            win: Windows { channel_rack: true, playlist: true, browser: true, ..Default::default() },
             window_layers: HashMap::new(),
+            docked: Vec::new(),
+            workspace: egui::Rect::from_min_size(egui::pos2(0.0, 80.0), egui::vec2(1600.0, 800.0)),
             selected_channel: selected,
             selected_channels: selected.into_iter().collect(),
             piano: PianoRoll::default(),
@@ -678,10 +686,10 @@ impl App {
 
     fn track_focus(&mut self, ctx: &egui::Context) {
         let pressed = ctx.input(|i| i.pointer.any_pressed().then(|| i.pointer.interact_pos()).flatten());
-        if let Some(pos) = pressed
-            && let Some(layer) = ctx.layer_id_at(pos)
-            && let Some(c) = self.window_layers.get(&layer)
-        {
+        let Some(pos) = pressed else { return };
+        if let Some(c) = ctx.layer_id_at(pos).and_then(|layer| self.window_layers.get(&layer)) {
+            self.focus = *c;
+        } else if let Some((_, c)) = self.docked.iter().find(|(r, _)| r.contains(pos)) {
             self.focus = *c;
         }
     }
@@ -794,6 +802,22 @@ impl App {
             });
             ui.separator();
 
+            // Window buttons, as in FL's toolbar (F5 Playlist, F6 Channel rack, F7 Piano roll,
+            // F9 Mixer, Alt+F8 Browser).
+            let wins = [
+                (icons::Icon::Song, self.win.playlist, Command::TogglePlaylist, "Playlist (F5)"),
+                (icons::Icon::Rack, self.win.channel_rack, Command::ToggleChannelRack, "Channel rack (F6)"),
+                (icons::Icon::Piano, self.win.piano_roll, Command::TogglePianoRoll, "Piano roll (F7)"),
+                (icons::Icon::Mixer, self.win.mixer, Command::ToggleMixer, "Mixer (F9)"),
+                (icons::Icon::Folder, self.win.browser, Command::ToggleBrowser, "Browser (Alt+F8)"),
+            ];
+            for (icon, open, cmd, tip) in wins {
+                if icons::button(ui, icon, open, tip).clicked() {
+                    self.run(&ui.ctx().clone(), cmd, None);
+                }
+            }
+            ui.separator();
+
             // Performance: real measurements from the audio thread.
             let load = self.shared.cpu_load();
             let overloads = self.shared.overloads.load(Ordering::Relaxed);
@@ -839,6 +863,10 @@ impl App {
                             }
                         }
                     });
+                }
+                if ui.button("Import FL Studio project (.flp)…").on_hover_text("Brings in tempo, channels, patterns, notes and the Playlist; FL plugins become the closest Soundesti instruments").clicked() {
+                    self.request(AfterConfirm::ImportFlp);
+                    ui.close();
                 }
                 if ui.button("Open last autosave").clicked() {
                     if let Some(p) = crate::files::autosave_path().filter(|p| p.exists()) {
@@ -1189,16 +1217,45 @@ impl eframe::App for App {
         egui::Panel::bottom("hint").frame(egui::Frame::new().fill(theme::PANEL_DARK).inner_margin(4)).show(ui, |ui| {
             self.hint_bar(ui);
         });
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| {
-            let r = ui.max_rect();
-            ui.painter().text(
-                r.center(),
-                egui::Align2::CENTER_CENTER,
-                "SOUNDESTI",
-                egui::FontId::proportional(64.0),
-                Color32::from_rgba_unmultiplied(255, 255, 255, 8),
-            );
+        // FL's default screen: Browser docked on the left, Playlist filling the workspace,
+        // Channel Rack / Piano roll / Mixer floating on top.
+        self.docked.clear();
+        if self.win.browser {
+            let r = egui::Panel::left("browser_dock")
+                .resizable(true)
+                .default_size(270.0)
+                .size_range(180.0..=520.0)
+                .frame(egui::Frame::new().fill(theme::PANEL).inner_margin(0))
+                .show(ui, |ui| {
+                    if dock_header(ui, icons::Icon::Folder, "Browser", self.focus == Context::Browser) {
+                        self.win.browser = false;
+                    }
+                    egui::Frame::new().inner_margin(6).show(ui, |ui| self.browser_ui(ui));
+                });
+            self.docked.push((r.response.rect, Context::Browser));
+        }
+        let r = egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| {
+            if self.win.playlist {
+                let title = format!("Playlist - Arrangement  ›  {}", self.project.current().name);
+                if dock_header(ui, icons::Icon::Song, &title, self.focus == Context::Playlist) {
+                    self.win.playlist = false;
+                }
+                egui::Frame::new().inner_margin(4).show(ui, |ui| self.playlist_ui(ui));
+            } else {
+                let r = ui.max_rect();
+                ui.painter().text(
+                    r.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "SOUNDESTI",
+                    egui::FontId::proportional(64.0),
+                    Color32::from_rgba_unmultiplied(255, 255, 255, 8),
+                );
+            }
         });
+        self.workspace = r.response.rect;
+        if self.win.playlist {
+            self.docked.push((r.response.rect, Context::Playlist));
+        }
 
         self.windows(&ctx);
         self.dialogs(&ctx);
@@ -1230,4 +1287,34 @@ impl eframe::App for App {
         storage.set_string(crate::updates::AUTO_CHECK_KEY, self.auto_update.to_string());
         storage.set_string(MCP_KEY, self.mcp_enabled.to_string());
     }
+}
+
+/// Title strip of a docked area (FL-style window caption). Returns true when closed.
+fn dock_header(ui: &mut Ui, icon: icons::Icon, title: &str, focused: bool) -> bool {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 24.0), egui::Sense::hover());
+    let fill = if focused { theme::TITLE_FOCUSED } else { theme::TITLE };
+    ui.painter().rect_filled(rect, 0.0, fill);
+    let icon_rect =
+        egui::Rect::from_center_size(egui::pos2(rect.left() + 14.0, rect.center().y), egui::vec2(14.0, 14.0));
+    icons::paint(ui.painter(), icon_rect, icon, if focused { theme::ACCENT } else { theme::TEXT_DIM });
+    ui.painter().text(
+        egui::pos2(rect.left() + 28.0, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        title,
+        egui::FontId::proportional(13.0),
+        if focused { theme::TEXT } else { theme::TEXT_DIM },
+    );
+    let close = egui::Rect::from_center_size(egui::pos2(rect.right() - 14.0, rect.center().y), egui::vec2(18.0, 18.0));
+    let r = ui.interact(close, ui.scope_id().with(("dock_close", title)), egui::Sense::click()).on_hover_text("Close");
+    let c = if r.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+    let k = 4.5;
+    ui.painter().line_segment(
+        [close.center() + egui::vec2(-k, -k), close.center() + egui::vec2(k, k)],
+        egui::Stroke::new(1.5, c),
+    );
+    ui.painter().line_segment(
+        [close.center() + egui::vec2(-k, k), close.center() + egui::vec2(k, -k)],
+        egui::Stroke::new(1.5, c),
+    );
+    r.clicked()
 }

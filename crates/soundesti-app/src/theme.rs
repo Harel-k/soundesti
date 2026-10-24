@@ -26,6 +26,9 @@ pub const PLAYHEAD: Color32 = Color32::from_rgb(0x9f, 0xff, 0x8a);
 pub const METER_LOW: Color32 = Color32::from_rgb(0x3d, 0xdc, 0x84);
 pub const METER_MID: Color32 = Color32::from_rgb(0xf5, 0xd4, 0x42);
 pub const METER_HIGH: Color32 = Color32::from_rgb(0xff, 0x4d, 0x4d);
+/// Window/dock caption strips (focused one is lighter, as in FL).
+pub const TITLE: Color32 = Color32::from_rgb(0x33, 0x3b, 0x43);
+pub const TITLE_FOCUSED: Color32 = Color32::from_rgb(0x41, 0x4b, 0x55);
 
 pub fn rgb(c: [u8; 3]) -> Color32 {
     Color32::from_rgb(c[0], c[1], c[2])
@@ -41,8 +44,9 @@ pub fn apply(ctx: &egui::Context) {
     v.selection.bg_fill = ACCENT_DIM;
     v.selection.stroke = Stroke::new(1.0, ACCENT);
     v.hyperlink_color = ACCENT;
-    v.window_corner_radius = CornerRadius::same(4);
-    v.window_stroke = Stroke::new(1.0, Color32::from_rgb(0x44, 0x4e, 0x58));
+    v.window_corner_radius = CornerRadius::same(2);
+    v.window_stroke = Stroke::new(1.0, Color32::from_rgb(0x50, 0x5b, 0x66));
+    v.window_shadow = egui::Shadow { offset: [0, 4], blur: 14, spread: 0, color: Color32::from_black_alpha(110) };
     v.widgets.noninteractive.bg_fill = PANEL;
     v.widgets.inactive.bg_fill = Color32::from_rgb(0x3a, 0x43, 0x4c);
     v.widgets.inactive.weak_bg_fill = Color32::from_rgb(0x3a, 0x43, 0x4c);

@@ -1,0 +1,10 @@
+[package]
+name = "soundesti-flp"
+description = "FL Studio project (.flp) importer: tempo, channels, patterns, notes and the playlist arrangement."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+soundesti-project.workspace = true
+soundesti-timeline.workspace = true

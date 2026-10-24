@@ -70,10 +70,7 @@ impl App {
                 }
             }
             // The empty area below the rows adds a new channel.
-            let (rest, _) = ui.allocate_exact_size(
-                vec2(ui.available_width(), ui.available_height().clamp(STEP_H * 2.0, 300.0)),
-                Sense::hover(),
-            );
+            let (rest, _) = ui.allocate_exact_size(vec2(ui.available_width(), STEP_H * 1.5), Sense::hover());
             let r = ui.interact(rest, ui.scope_id().with("rack_drop_new"), Sense::hover());
             if dragging_sample && r.contains_pointer() {
                 ui.painter().rect_stroke(rest, 2.0, egui::Stroke::new(1.5, theme::ACCENT), egui::StrokeKind::Inside);

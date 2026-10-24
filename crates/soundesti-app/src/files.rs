@@ -1,4 +1,4 @@
-﻿//! Save / open / recent files / autosave / WAV export jobs.
+//! Save / open / recent files / autosave / WAV export jobs.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -128,9 +128,18 @@ impl App {
                 self.set_status("New project.");
             }
             AfterConfirm::Open(path) => {
-                let path = path
-                    .or_else(|| rfd::FileDialog::new().add_filter("Soundesti project", &[FILE_EXTENSION]).pick_file());
+                let path = path.or_else(|| {
+                    rfd::FileDialog::new()
+                        .add_filter("Projects (Soundesti, FL Studio)", &[FILE_EXTENSION, "flp"])
+                        .add_filter("Soundesti project", &[FILE_EXTENSION])
+                        .add_filter("FL Studio project", &["flp"])
+                        .pick_file()
+                });
                 let Some(path) = path else { return };
+                if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("flp")) {
+                    self.import_flp(&path);
+                    return;
+                }
                 match soundesti_project::load(&path) {
                     Ok(p) => {
                         self.session.send(EngineCmd::Stop);
@@ -142,6 +151,15 @@ impl App {
                         self.dialog =
                             Some(Dialog::Message { title: "Could not open project".into(), text: e.to_string() })
                     }
+                }
+            }
+            AfterConfirm::ImportFlp => {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("FL Studio project", &["flp"])
+                    .set_title("Import FL Studio project")
+                    .pick_file()
+                {
+                    self.import_flp(&path);
                 }
             }
             AfterConfirm::Quit => {
@@ -156,6 +174,43 @@ impl App {
                     }
                     Err(e) => self.set_status(format!("Could not start the updater: {e}")),
                 }
+            }
+        }
+    }
+
+    /// Imports an FL Studio project as a new, unsaved Soundesti project and shows the report.
+    pub fn import_flp(&mut self, path: &std::path::Path) {
+        match soundesti_flp::import_file(path) {
+            Ok(imp) => {
+                self.session.send(EngineCmd::Stop);
+                let mut project = imp.project;
+                if project.meta.title.is_empty() {
+                    project.meta.title = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                }
+                let summary = format!(
+                    "{} channels, {} patterns, {} Playlist clips at {:.1} BPM.",
+                    project.channels.len(),
+                    project.patterns.len(),
+                    project.playlist.clips.len(),
+                    project.bpm
+                );
+                self.replace_project(project, None);
+                // Not saved yet: Ctrl+S asks where to save the .soundesti file.
+                self.saved_revision = self.revision.wrapping_sub(1);
+                let version = if imp.fl_version.is_empty() { String::new() } else { format!(" {}", imp.fl_version) };
+                let mut text = format!("Imported from FL Studio{version}: {summary}\n");
+                for r in &imp.report {
+                    text.push_str(&format!("\n• {r}"));
+                }
+                text.push_str("\n\nSave it (Ctrl+S) to keep it as a Soundesti project. The .flp file was not changed.");
+                self.dialog = Some(Dialog::Message { title: "FL Studio project imported".into(), text });
+                self.set_status(format!("Imported {}", path.display()));
+            }
+            Err(e) => {
+                self.dialog = Some(Dialog::Message {
+                    title: "Could not import FL Studio project".into(),
+                    text: format!("{}: {e}", path.display()),
+                });
             }
         }
     }
