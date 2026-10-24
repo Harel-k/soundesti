@@ -11,7 +11,8 @@ use std::sync::Arc;
 
 use soundesti_audio::{Command, Engine, EngineConfig, EngineHandle, PlaybackNote, PlaybackSnapshot};
 use soundesti_plugin_api::Instrument;
-use soundesti_project::{Channel, ChannelId, InstrumentState, Project};
+use soundesti_plugin_host::PluginInstance;
+use soundesti_project::{Channel, ChannelId, InstrumentState, PLUGIN_TYPE_ID, PluginRef, Project};
 use soundesti_timeline::TempoMap;
 
 /// Creates and configures the instrument described by a channel.
@@ -110,6 +111,87 @@ pub struct Session {
     pub sample_error: Option<String>,
     /// The Browser's preview voice lives in the last engine slot (never used by channels).
     preview_ready: bool,
+    /// Running third-party plugins, for their editor windows and saving their settings.
+    plugins: HashMap<PluginKey, Arc<dyn PluginInstance>>,
+    /// Plugins that failed to load since the UI last looked.
+    pub plugin_errors: Vec<String>,
+}
+
+/// Where a running plugin sits in the project.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PluginKey {
+    Channel(ChannelId),
+    /// Mixer track, effect slot.
+    Effect(usize, usize),
+}
+
+/// Stand-in for a plugin that could not be loaded: the channel stays, silent.
+struct Silent;
+
+impl soundesti_plugin_api::Instrument for Silent {
+    fn type_id(&self) -> &'static str {
+        PLUGIN_TYPE_ID
+    }
+    fn display_name(&self) -> &'static str {
+        "Missing plugin"
+    }
+    fn params(&self) -> &'static [soundesti_plugin_api::ParamInfo] {
+        &[]
+    }
+    fn get_param(&self, _id: u32) -> f32 {
+        0.0
+    }
+    fn set_param(&mut self, _id: u32, _value: f32) {}
+    fn process(&mut self, _events: &[soundesti_plugin_api::TimedEvent], _l: &mut [f32], _r: &mut [f32]) {}
+    fn active_voices(&self) -> usize {
+        0
+    }
+}
+
+/// Turns a project plugin reference into what the host needs to load it.
+pub fn plugin_desc(r: &PluginRef) -> Option<soundesti_plugin_host::PluginDesc> {
+    use soundesti_plugin_host::PluginFormat;
+    let format = match r.format.as_str() {
+        "vst2" => PluginFormat::Vst2,
+        "vst3" => PluginFormat::Vst3,
+        "clap" => PluginFormat::Clap,
+        _ => return None,
+    };
+    Some(soundesti_plugin_host::PluginDesc {
+        format,
+        path: r.path.clone().into(),
+        id: r.id.clone(),
+        name: r.name.clone(),
+        vendor: r.vendor.clone(),
+        is_instrument: false,
+        inputs: 0,
+        outputs: 0,
+    })
+}
+
+/// The project reference for a scanned plugin.
+pub fn plugin_ref(d: &soundesti_plugin_host::PluginDesc) -> PluginRef {
+    let format = match d.format {
+        soundesti_plugin_host::PluginFormat::Vst2 => "vst2",
+        soundesti_plugin_host::PluginFormat::Vst3 => "vst3",
+        soundesti_plugin_host::PluginFormat::Clap => "clap",
+    };
+    PluginRef {
+        format: format.into(),
+        path: d.path.display().to_string(),
+        id: d.id.clone(),
+        name: d.name.clone(),
+        vendor: d.vendor.clone(),
+        state: None,
+    }
+}
+
+fn same_plugin(a: Option<&PluginRef>, b: Option<&PluginRef>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => a.same_plugin(b),
+        (None, None) => true,
+        _ => false,
+    }
 }
 
 /// MIDI key the preview sampler plays (its root key, so samples play at their own pitch).
@@ -142,6 +224,54 @@ impl Session {
             sample_cache: HashMap::new(),
             sample_error: None,
             preview_ready: false,
+            plugins: HashMap::new(),
+            plugin_errors: Vec::new(),
+        }
+    }
+
+    /// The running plugin at `key`, if any (for opening its editor).
+    pub fn plugin(&self, key: PluginKey) -> Option<Arc<dyn PluginInstance>> {
+        self.plugins.get(&key).cloned()
+    }
+
+    /// Loads a plugin and restores its saved settings. Failures are reported, not fatal.
+    fn load_plugin(&mut self, key: PluginKey, r: &PluginRef) -> Option<Arc<dyn PluginInstance>> {
+        let loaded = plugin_desc(r)
+            .ok_or_else(|| format!("unknown plugin format \"{}\"", r.format))
+            .and_then(|d| soundesti_plugin_host::load(&d, self.sample_rate).map_err(|e| e.to_string()));
+        match loaded {
+            Ok(p) => {
+                if let Some(state) = r.state.as_deref().and_then(soundesti_project::b64::decode)
+                    && !p.load_state(&state)
+                {
+                    self.plugin_errors.push(format!("{}: saved settings could not be restored", r.name));
+                }
+                self.plugins.insert(key, p.clone());
+                Some(p)
+            }
+            Err(e) => {
+                self.plugins.remove(&key);
+                self.plugin_errors.push(format!("{}: {e}", r.name));
+                None
+            }
+        }
+    }
+
+    /// Copies every running plugin's current settings into the project (before saving).
+    pub fn capture_plugin_states(&self, project: &mut Project) {
+        for ch in &mut project.channels {
+            if let (Some(r), Some(p)) = (ch.instrument.plugin.as_mut(), self.plugins.get(&PluginKey::Channel(ch.id))) {
+                r.state = p.save_state().map(|s| soundesti_project::b64::encode(&s));
+            }
+        }
+        for (t, track) in project.mixer.iter_mut().enumerate() {
+            for e in &mut track.effects {
+                if let (Some(r), Some(p)) =
+                    (e.plugin.as_mut(), self.plugins.get(&PluginKey::Effect(t, e.slot as usize)))
+                {
+                    r.state = p.save_state().map(|s| soundesti_project::b64::encode(&s));
+                }
+            }
         }
     }
 
@@ -211,6 +341,7 @@ impl Session {
             if let Some(m) = self.channels.remove(&id) {
                 self.handle.send(Command::RemoveChannel { slot: m.slot });
             }
+            self.plugins.remove(&PluginKey::Channel(id));
         }
         self.solo.retain(|id| live.contains(id));
 
@@ -271,11 +402,26 @@ impl Session {
             match (before, after) {
                 (None, None) => {}
                 (Some(_), None) => {
+                    self.plugins.remove(&PluginKey::Effect(track, slot));
                     self.handle.send(Command::SetEffect { track, slot, effect: None });
+                }
+                (b, Some(a))
+                    if b.is_none_or(|b| {
+                        b.type_id != a.type_id || !same_plugin(b.plugin.as_ref(), a.plugin.as_ref())
+                    }) && a.type_id == PLUGIN_TYPE_ID =>
+                {
+                    let plugin = a.plugin.as_ref().and_then(|r| self.load_plugin(PluginKey::Effect(track, slot), r));
+                    let effect = plugin.map(|p| {
+                        Box::new(soundesti_plugin_host::PluginEffect { plugin: p })
+                            as Box<dyn soundesti_plugin_api::Effect>
+                    });
+                    self.handle.send(Command::SetEffect { track, slot, effect });
+                    self.handle.send(Command::SetEffectBypass { track, slot, bypass: a.bypass });
                 }
                 (b, Some(a)) => {
                     let infos = soundesti_effects::params_for(&a.type_id);
                     if b.is_none_or(|b| b.type_id != a.type_id) {
+                        self.plugins.remove(&PluginKey::Effect(track, slot));
                         let effect = soundesti_effects::create(&a.type_id, self.sample_rate).map(|mut fx| {
                             for p in infos {
                                 if let Some(&v) = a.params.get(p.key) {
@@ -314,9 +460,22 @@ impl Session {
                 None => return, // engine full; channel stays silent (reported by UI)
             },
         };
-        let needs_new_instrument = existing.as_ref().is_none_or(|m| m.instrument.type_id != ch.instrument.type_id);
+        let needs_new_instrument = existing.as_ref().is_none_or(|m| {
+            m.instrument.type_id != ch.instrument.type_id
+                || !same_plugin(m.instrument.plugin.as_ref(), ch.instrument.plugin.as_ref())
+        });
         if needs_new_instrument {
-            let Some(inst) = build_instrument(&ch.instrument, self.sample_rate) else { return };
+            let inst: Box<dyn Instrument> = if ch.instrument.type_id == PLUGIN_TYPE_ID {
+                let plugin = ch.instrument.plugin.as_ref().and_then(|r| self.load_plugin(PluginKey::Channel(ch.id), r));
+                match plugin {
+                    Some(p) => Box::new(soundesti_plugin_host::PluginInstrument::new(p)),
+                    None => Box::new(Silent),
+                }
+            } else {
+                self.plugins.remove(&PluginKey::Channel(ch.id));
+                let Some(inst) = build_instrument(&ch.instrument, self.sample_rate) else { return };
+                inst
+            };
             self.handle.send(Command::AddChannel { slot, instrument: inst });
         } else if let Some(m) = &existing
             && m.instrument.params != ch.instrument.params
@@ -447,6 +606,41 @@ mod tests {
         assert!(loud(0..9_600), "clip at bar 1 must play");
         assert!(!loud(96_000 + 48_000..96_000 * 2), "bar 2 has no clip");
         assert!(loud(96_000 * 2..96_000 * 2 + 9_600), "clip at bar 3 must play");
+    }
+
+    #[test]
+    fn missing_plugins_stay_silent_and_report_once() {
+        let mut p = Project::empty();
+        let ch = p.add_channel("Gone synth", PLUGIN_TYPE_ID);
+        p.channel_mut(ch).unwrap().instrument.plugin = Some(PluginRef {
+            format: "vst2".into(),
+            path: "C:\\nowhere\\Gone.dll".into(),
+            id: "00000001".into(),
+            name: "Gone".into(),
+            vendor: String::new(),
+            state: None,
+        });
+        p.current_mut().notes_mut(ch).push(Note::new(0, 960, 60));
+        p.mixer[0].set_plugin_effect(
+            0,
+            PluginRef {
+                format: "vst3".into(),
+                path: "C:\\nowhere\\Fx.vst3".into(),
+                id: "x".into(),
+                name: "Fx".into(),
+                vendor: String::new(),
+                state: None,
+            },
+        );
+        let (mut engine, mut session) = Session::with_engine(&p, CFG);
+        assert_eq!(session.plugin_errors.len(), 2, "{:?}", session.plugin_errors);
+        assert!(session.plugin_errors[0].starts_with("Gone:"));
+        session.send(Command::Play);
+        assert!(render(&mut engine, 4_800).iter().all(|x| *x == 0.0), "missing plugin is silent");
+        session.plugin_errors.clear();
+        session.sync(&p);
+        assert!(session.plugin_errors.is_empty(), "no retry on every sync");
+        assert!(session.plugin(PluginKey::Channel(ch)).is_none());
     }
 
     #[test]

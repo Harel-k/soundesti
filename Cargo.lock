@@ -3725,6 +3725,7 @@ dependencies = [
  "env_logger",
  "image",
  "log",
+ "raw-window-handle",
  "rfd",
  "serde",
  "serde_json",
@@ -3736,6 +3737,7 @@ dependencies = [
  "soundesti-export",
  "soundesti-flp",
  "soundesti-plugin-api",
+ "soundesti-plugin-host",
  "soundesti-project",
  "soundesti-session",
  "soundesti-shortcuts",
@@ -3826,6 +3828,17 @@ name = "soundesti-plugin-api"
 version = "0.4.0"
 
 [[package]]
+name = "soundesti-plugin-host"
+version = "0.4.0"
+dependencies = [
+ "libloading",
+ "serde",
+ "serde_json",
+ "soundesti-plugin-api",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "soundesti-project"
 version = "0.4.0"
 dependencies = [
@@ -3844,6 +3857,7 @@ dependencies = [
  "soundesti-audio",
  "soundesti-effects",
  "soundesti-plugin-api",
+ "soundesti-plugin-host",
  "soundesti-project",
  "soundesti-synthesis",
  "soundesti-timeline",

@@ -24,6 +24,7 @@ soundesti-shortcuts = { path = "crates/soundesti-shortcuts" }
 soundesti-export = { path = "crates/soundesti-export" }
 soundesti-effects = { path = "crates/soundesti-effects" }
 soundesti-flp = { path = "crates/soundesti-flp" }
+soundesti-plugin-host = { path = "crates/soundesti-plugin-host" }
 
 # external (versions verified on crates.io 2026-10-24, see docs/DECISIONS.md)
 eframe = { version = "0.37", features = ["persistence"] }

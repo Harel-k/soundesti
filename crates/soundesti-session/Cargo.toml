@@ -10,6 +10,7 @@ soundesti-audio.workspace = true
 soundesti-project.workspace = true
 soundesti-synthesis.workspace = true
 soundesti-effects.workspace = true
+soundesti-plugin-host.workspace = true
 soundesti-plugin-api.workspace = true
 soundesti-timeline.workspace = true
 hound.workspace = true

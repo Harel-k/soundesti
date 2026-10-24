@@ -549,6 +549,18 @@ impl Engine {
     }
 
     fn render_block(&mut self, n: usize) {
+        // Hosted plugins read tempo and position from here (start of this block).
+        let tick = self.current_tick();
+        let ts = self.snapshot.time_signature;
+        soundesti_plugin_api::transport::publish(soundesti_plugin_api::transport::Transport {
+            bpm: self.snapshot.tempo.bpm_at(tick as Tick),
+            ppq_pos: tick / soundesti_timeline::PPQ as f64,
+            sample_pos: self.play_sample,
+            sample_rate: self.config.sample_rate,
+            playing: self.playing,
+            ts_num: ts.numerator,
+            ts_den: ts.denominator,
+        });
         if self.playing {
             self.schedule(n);
         }

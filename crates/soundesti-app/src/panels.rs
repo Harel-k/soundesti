@@ -52,6 +52,14 @@ impl App {
         self.win.mixer = open;
         self.register_window(&r, Context::Mixer);
 
+        let mut open = self.win.plugin_manager;
+        egui::Window::new("Plugin manager")
+            .id(Id::unique("w_plugin_manager"))
+            .open(&mut open)
+            .default_size([560.0, 520.0])
+            .show(ctx, |ui| self.plugin_manager_ui(ui));
+        self.win.plugin_manager = open;
+
         let mut open = self.win.plugin_picker;
         egui::Window::new("Plugin picker")
             .id(Id::unique("w_picker"))
@@ -137,7 +145,11 @@ impl App {
             else {
                 continue;
             };
-            let inst_name = soundesti_synthesis::info(&ty).map(|i| i.name).unwrap_or("Unknown instrument");
+            let plugin_name =
+                self.project.channel(id).and_then(|c| c.instrument.plugin.as_ref()).map(|p| p.name.clone());
+            let inst_name = plugin_name.unwrap_or_else(|| {
+                soundesti_synthesis::info(&ty).map(|i| i.name).unwrap_or("Unknown instrument").to_string()
+            });
             let mut open = true;
             egui::Window::new(format!("{name} ({inst_name})"))
                 .id(Id::unique(("w_inst", id.0)))
@@ -158,7 +170,11 @@ impl App {
                 self.win.effects.remove(&(track, slot));
                 continue;
             };
-            let name = soundesti_effects::info(&type_id).map(|i| i.name).unwrap_or("Unknown effect");
+            let plugin_name =
+                self.project.mixer[track].effect(slot).and_then(|e| e.plugin.as_ref()).map(|p| p.name.clone());
+            let name = plugin_name.unwrap_or_else(|| {
+                soundesti_effects::info(&type_id).map(|i| i.name).unwrap_or("Unknown effect").to_string()
+            });
             let mut open = true;
             egui::Window::new(format!("{name} - {} slot {}", self.project.mixer[track].name, slot + 1))
                 .id(Id::unique(("w_fx", track, slot)))
@@ -190,7 +206,7 @@ impl App {
             });
         }
         ui.separator();
-        ui.label(RichText::new("Effects are added in the Mixer (select a track, then an empty slot). CLAP/VST3 plugin hosting is not available yet.").color(theme::TEXT_DIM));
+        ui.label(RichText::new("Effects are added in the Mixer (select a track, then an empty slot). VST plugins: OPTIONS > Manage plugins (VST3 and CLAP support is coming).").color(theme::TEXT_DIM));
     }
 
     fn song_info_ui(&mut self, ui: &mut Ui) {
@@ -369,6 +385,10 @@ impl App {
 
     fn instrument_ui(&mut self, ui: &mut Ui, id: ChannelId) {
         let Some(ch) = self.project.channel(id).cloned() else { return };
+        if ch.instrument.plugin.is_some() {
+            self.plugin_params_ui(ui, soundesti_session::PluginKey::Channel(id));
+            return;
+        }
         if ch.instrument.type_id == soundesti_synthesis::sampler::TYPE_ID {
             ui.horizontal(|ui| {
                 crate::icons::inline(ui, crate::icons::Icon::Wave, theme::rgb(ch.color));

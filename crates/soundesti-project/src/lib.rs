@@ -6,6 +6,7 @@
 //! Like FL Studio, step-sequencer steps are not separate data: a lit step *is* a
 //! note that starts on that step. The Channel Rack and Piano Roll edit the same notes.
 
+pub mod b64;
 mod file;
 mod history;
 pub mod playlist;
@@ -22,6 +23,8 @@ use std::collections::BTreeMap;
 pub const DEFAULT_NOTE_KEY: u8 = 60;
 /// Default note velocity (FL's 100 of 128).
 pub const DEFAULT_VELOCITY: f32 = 100.0 / 128.0;
+/// `type_id` of channels and effect slots that use a third-party plugin.
+pub const PLUGIN_TYPE_ID: &str = "plugin";
 /// Inserts after the master track.
 pub const INSERT_TRACKS: usize = 125;
 
@@ -51,6 +54,32 @@ pub struct InstrumentState {
     /// Audio file for sample-based instruments (absolute path).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sample: Option<String>,
+    /// Third-party plugin (when `type_id` is "plugin").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<PluginRef>,
+}
+
+/// A third-party plugin (VST2, VST3 or CLAP) and its saved settings.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PluginRef {
+    /// "vst2", "vst3" or "clap".
+    pub format: String,
+    pub path: String,
+    /// Format-specific plugin identity.
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub vendor: String,
+    /// The plugin's own saved settings, base64-encoded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+}
+
+impl PluginRef {
+    /// Same plugin (ignoring its settings).
+    pub fn same_plugin(&self, other: &PluginRef) -> bool {
+        self.format == other.format && self.path == other.path && self.id == other.id
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -217,6 +246,9 @@ pub struct EffectSlot {
     pub params: BTreeMap<String, f32>,
     #[serde(default)]
     pub bypass: bool,
+    /// Third-party plugin (when `type_id` is "plugin").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<PluginRef>,
 }
 
 impl MixerTrack {
@@ -243,8 +275,17 @@ impl MixerTrack {
             type_id: type_id.into(),
             params: BTreeMap::new(),
             bypass: false,
+            plugin: None,
         });
         self.effects.sort_by_key(|e| e.slot);
+    }
+
+    /// Puts a third-party effect plugin in `slot`, replacing what was there.
+    pub fn set_plugin_effect(&mut self, slot: usize, plugin: PluginRef) {
+        self.set_effect(slot, PLUGIN_TYPE_ID);
+        if let Some(e) = self.effect_mut(slot) {
+            e.plugin = Some(plugin);
+        }
     }
 
     pub fn remove_effect(&mut self, slot: usize) {
@@ -352,7 +393,12 @@ impl Project {
             id,
             name: name.into(),
             color,
-            instrument: InstrumentState { type_id: instrument_type.into(), params: BTreeMap::new(), sample: None },
+            instrument: InstrumentState {
+                type_id: instrument_type.into(),
+                params: BTreeMap::new(),
+                sample: None,
+                plugin: None,
+            },
             volume: 0.78,
             pan: 0.0,
             muted: false,

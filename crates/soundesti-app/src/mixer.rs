@@ -84,7 +84,14 @@ impl App {
                 ui.label(RichText::new(format!("{}", slot + 1)).small().color(theme::TEXT_DIM));
                 match track.effect(slot) {
                     Some(fx) => {
-                        let name = soundesti_effects::info(&fx.type_id).map(|i| i.name).unwrap_or("Unknown effect");
+                        let name = match &fx.plugin {
+                            Some(p) => p.name.clone(),
+                            None => soundesti_effects::info(&fx.type_id)
+                                .map(|i| i.name)
+                                .unwrap_or("Unknown effect")
+                                .to_string(),
+                        };
+                        let is_plugin = fx.plugin.is_some();
                         if widgets::led(ui, !fx.bypass, "Enable / bypass this effect").clicked() {
                             self.checkpoint("Bypass effect");
                             if let Some(e) = self.project.mixer[t].effect_mut(slot) {
@@ -99,11 +106,17 @@ impl App {
                                 egui::Button::new(text).selected(self.win.effects.contains(&(t, slot))),
                             )
                             .on_hover_text("Click to open; right-click for options");
-                        if r.clicked() && !self.win.effects.remove(&(t, slot)) {
+                        if r.clicked() && is_plugin {
+                            self.open_plugin_editor(soundesti_session::PluginKey::Effect(t, slot));
+                        } else if r.clicked() && !self.win.effects.remove(&(t, slot)) {
                             self.win.effects.insert((t, slot));
                         }
                         r.context_menu(|ui| {
                             ui.menu_button("Replace", |ui| self.effect_menu(ui, t, slot));
+                            if is_plugin && ui.button("Parameters…").clicked() {
+                                self.win.effects.insert((t, slot));
+                                ui.close();
+                            }
                             if slot > 0 && ui.button("Move up").clicked() {
                                 self.move_effect(t, slot, slot - 1);
                                 ui.close();
@@ -154,6 +167,7 @@ impl App {
                 ui.close();
             }
         }
+        self.plugin_effect_menu(ui, track, slot);
     }
 
     pub fn set_effect(&mut self, track: usize, slot: usize, type_id: &str) {
@@ -168,6 +182,8 @@ impl App {
 
     fn move_effect(&mut self, track: usize, from: usize, to: usize) {
         self.checkpoint("Move effect");
+        // Moving recreates plugins in their new slot; keep their current settings.
+        self.session.capture_plugin_states(&mut self.project);
         self.project.mixer[track].move_effect(from, to);
         let (a, b) = (self.win.effects.remove(&(track, from)), self.win.effects.remove(&(track, to)));
         if a {
@@ -182,6 +198,10 @@ impl App {
     /// Body of a floating effect window (knobs for every parameter).
     pub fn effect_ui(&mut self, ui: &mut Ui, track: usize, slot: usize) {
         let Some(fx) = self.project.mixer.get(track).and_then(|t| t.effect(slot)).cloned() else { return };
+        if fx.plugin.is_some() {
+            self.plugin_params_ui(ui, soundesti_session::PluginKey::Effect(track, slot));
+            return;
+        }
         let params = soundesti_effects::params_for(&fx.type_id);
         ui.horizontal(|ui| {
             if widgets::led(ui, !fx.bypass, "Enable / bypass").clicked() {

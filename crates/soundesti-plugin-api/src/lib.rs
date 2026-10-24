@@ -138,6 +138,54 @@ pub fn for_each_segment<S>(
     }
 }
 
+/// Song transport as seen by hosted plugins (tempo, play state, position). The audio
+/// engine publishes it once per block; plugin hosts read it. Lock-free.
+pub mod transport {
+    use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU8, AtomicU64, Ordering::Relaxed};
+
+    static BPM: AtomicU64 = AtomicU64::new(0x405E_0000_0000_0000); // 120.0
+    static PPQ_POS: AtomicU64 = AtomicU64::new(0);
+    static SAMPLE_POS: AtomicI64 = AtomicI64::new(0);
+    static SAMPLE_RATE: AtomicU64 = AtomicU64::new(0x40E7_7000_0000_0000); // 48000.0
+    static PLAYING: AtomicBool = AtomicBool::new(false);
+    static TS_NUM: AtomicU8 = AtomicU8::new(4);
+    static TS_DEN: AtomicU8 = AtomicU8::new(4);
+
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub struct Transport {
+        pub bpm: f64,
+        /// Position in quarter notes.
+        pub ppq_pos: f64,
+        pub sample_pos: i64,
+        pub sample_rate: f64,
+        pub playing: bool,
+        pub ts_num: u8,
+        pub ts_den: u8,
+    }
+
+    pub fn publish(t: Transport) {
+        BPM.store(t.bpm.to_bits(), Relaxed);
+        PPQ_POS.store(t.ppq_pos.to_bits(), Relaxed);
+        SAMPLE_POS.store(t.sample_pos, Relaxed);
+        SAMPLE_RATE.store(t.sample_rate.to_bits(), Relaxed);
+        PLAYING.store(t.playing, Relaxed);
+        TS_NUM.store(t.ts_num, Relaxed);
+        TS_DEN.store(t.ts_den, Relaxed);
+    }
+
+    pub fn read() -> Transport {
+        Transport {
+            bpm: f64::from_bits(BPM.load(Relaxed)),
+            ppq_pos: f64::from_bits(PPQ_POS.load(Relaxed)),
+            sample_pos: SAMPLE_POS.load(Relaxed),
+            sample_rate: f64::from_bits(SAMPLE_RATE.load(Relaxed)),
+            playing: PLAYING.load(Relaxed),
+            ts_num: TS_NUM.load(Relaxed),
+            ts_den: TS_DEN.load(Relaxed),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -14,12 +14,18 @@ mod panels;
 mod params_ui;
 mod piano_roll;
 mod playlist;
+mod plugins;
 mod theme;
 mod updates;
 mod widgets;
 
 fn main() -> eframe::Result {
     // `--mcp-stdio`: run only the MCP stdio bridge (no window); stdout belongs to the protocol.
+    // `--scan-plugin <format> <path>`: inspect one plugin file for the scanner (child process).
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(i) = args.iter().position(|a| a == soundesti_plugin_host::scan::SCAN_FLAG) {
+        std::process::exit(soundesti_plugin_host::scan::child_main(&args[i + 1..]));
+    }
     if std::env::args().any(|a| a == "--mcp-stdio") {
         let port = std::env::var("SOUNDESTI_MCP_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(mcp::DEFAULT_PORT);
         std::process::exit(mcp::run_stdio_bridge(port));
@@ -43,5 +49,13 @@ fn main() -> eframe::Result {
     let args: Vec<std::path::PathBuf> = std::env::args_os().skip(1).map(std::path::PathBuf::from).collect();
     let force_mcp = args.iter().any(|a| a.as_os_str() == "--mcp");
     let open_file = args.into_iter().find(|p| p.exists());
-    eframe::run_native("Soundesti", options, Box::new(move |cc| Ok(Box::new(app::App::new(cc, open_file, force_mcp)))))
+    let result = eframe::run_native(
+        "Soundesti",
+        options,
+        Box::new(move |cc| Ok(Box::new(app::App::new(cc, open_file, force_mcp)))),
+    );
+    if soundesti_plugin_host::any_loaded() {
+        soundesti_plugin_host::exit_skipping_plugin_shutdown(if result.is_ok() { 0 } else { 1 });
+    }
+    result
 }

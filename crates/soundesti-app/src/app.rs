@@ -93,6 +93,7 @@ pub struct Windows {
     pub instruments: BTreeSet<ChannelId>,
     /// Open effect windows as (mixer track, slot).
     pub effects: BTreeSet<(usize, usize)>,
+    pub plugin_manager: bool,
 }
 
 pub enum Dialog {
@@ -144,6 +145,9 @@ pub struct App {
     pub piano: PianoRoll,
     pub playlist: crate::playlist::PlaylistView,
     pub browser: crate::browser::BrowserView,
+    pub plugins: crate::plugins::PluginUi,
+    /// Plugin editor to open once the next sync has started the plugin.
+    pub pending_editor: Option<soundesti_session::PluginKey>,
     pub selected_track: usize,
     pub track_meters: Vec<MeterState>,
     pub channel_meters: Vec<MeterState>,
@@ -238,6 +242,8 @@ impl App {
             piano: PianoRoll::default(),
             playlist: Default::default(),
             browser: crate::browser::BrowserView::new(),
+            plugins: crate::plugins::PluginUi::new(crate::plugins::main_window_handle(cc)),
+            pending_editor: None,
             selected_track: 1,
             track_meters: vec![MeterState::default(); soundesti_audio::MIXER_TRACKS],
             channel_meters: vec![MeterState::default(); 256],
@@ -935,6 +941,11 @@ impl App {
                 }
             });
             ui.menu_button("OPTIONS", |ui| {
+                if ui.button("Manage plugins…").on_hover_text("Find VST, VST3 and CLAP plugins on this PC").clicked() {
+                    self.win.plugin_manager = true;
+                    ui.close();
+                }
+                ui.separator();
                 let mut ai = self.mcp_enabled;
                 if ui
                     .checkbox(&mut ai, "AI control (MCP server)")
@@ -1045,6 +1056,7 @@ impl App {
                 ui.close();
             }
         }
+        self.plugin_instrument_menu(ui);
     }
 
     /// Opens a file dialog and assigns a WAV file to a Sampler channel.
@@ -1267,13 +1279,19 @@ impl eframe::App for App {
             self.session.mixer_solo = self.mixer_solo;
             self.session.sync(&self.project);
             self.needs_sync = false;
+            if let Some(key) = self.pending_editor.take() {
+                self.open_plugin_editor(key);
+            }
         } else {
             self.session.handle().collect_garbage();
         }
+        self.tick_plugins();
         self.update_title(&ctx);
 
         let playing = self.shared.playing.load(Ordering::Relaxed);
-        ctx.request_repaint_after(std::time::Duration::from_millis(if playing { 16 } else { 50 }));
+        // Plugin editors need regular idle calls; scans report progress.
+        let busy = playing || self.plugins.any_editor_open() || self.plugins.scanning();
+        ctx.request_repaint_after(std::time::Duration::from_millis(if busy { 16 } else { 50 }));
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

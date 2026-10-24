@@ -169,6 +169,12 @@ pub fn tool_definitions() -> Vec<Value> {
             &["action"],
         ),
         tool(
+            "plugins",
+            "Third-party VST plugins. Actions: list (scanned plugins; `scanning` tells if a scan runs), scan (find plugins in the standard folders, runs in the background), add_channel (instrument plugin by `name` as a new channel; opens its window), add_effect (effect plugin by `name` into mixer `track`/`slot`), open_editor (the plugin window of `channel`, or of `track`/`slot`).",
+            json!({"action": {"type": "string", "enum": ["list", "scan", "add_channel", "add_effect", "open_editor"]}, "name": {"type": "string"}, "channel": ch, "track": {"type": "integer"}, "slot": {"type": "integer"}}),
+            &["action"],
+        ),
+        tool(
             "pattern",
             "Select, create or rename patterns.",
             json!({"action": {"type": "string", "enum": ["select", "new", "rename"]}, "pattern": {"type": "integer", "description": "Pattern id (select/rename)"}, "name": {"type": "string"}}),
@@ -523,6 +529,7 @@ impl App {
             "mixer_effect" => self.mcp_mixer_effect(a),
             "playlist" => self.mcp_playlist(a),
             "browser" => self.mcp_browser(a),
+            "plugins" => self.mcp_plugins(a),
             "set_window" => {
                 let open = b(a, "open").ok_or("missing `open`")?;
                 let w = &mut self.win;
@@ -722,6 +729,59 @@ impl App {
                 let on = b(a, "enabled").ok_or("missing `enabled`")?;
                 self.project.song_mode = on;
                 text(json!({"ok": true, "song_mode": on}))
+            }
+            other => Err(format!("unknown action `{other}`")),
+        }
+    }
+
+    fn mcp_plugins(&mut self, a: &Value) -> ToolResult {
+        let find = |app: &App, inst: bool| -> Result<soundesti_plugin_host::PluginDesc, String> {
+            let name = s(a, "name").ok_or("missing `name`")?.to_lowercase();
+            app.plugins
+                .cache
+                .plugins()
+                .into_iter()
+                .filter(|p| p.is_instrument == inst)
+                .find(|p| p.name.to_lowercase() == name)
+                .ok_or_else(|| {
+                    format!("no {} plugin named that (see action=list)", if inst { "instrument" } else { "effect" })
+                })
+        };
+        match s(a, "action").ok_or("missing `action`")? {
+            "list" => text(json!({
+                "scanning": self.plugins.scanning(),
+                "plugins": self.plugins.cache.plugins().iter().map(|p| json!({"name": p.name, "vendor": p.vendor, "format": p.format.label(), "instrument": p.is_instrument, "path": p.path})).collect::<Vec<_>>(),
+                "failed_files": self.plugins.cache.failures().count(),
+            })),
+            "scan" => {
+                self.start_plugin_scan();
+                text(json!({"ok": true, "scanning": true}))
+            }
+            "add_channel" => {
+                let d = find(self, true)?;
+                self.add_plugin_channel(&d);
+                text(json!({"ok": true, "channel": self.selected_channel.map(|c| c.0)}))
+            }
+            "add_effect" => {
+                let d = find(self, false)?;
+                let t = self.mcp_track(a)?;
+                let slot = i(a, "slot")
+                    .filter(|x| (0..soundesti_project::FX_SLOTS as i64).contains(x))
+                    .ok_or("`slot` must be 0-9")? as usize;
+                self.set_plugin_effect(t, slot, &d);
+                text(json!({"ok": true}))
+            }
+            "open_editor" => {
+                let key = match a.get("channel") {
+                    Some(c) => soundesti_session::PluginKey::Channel(self.resolve_channel(Some(c))?),
+                    None => soundesti_session::PluginKey::Effect(
+                        self.mcp_track(a)?,
+                        i(a, "slot").ok_or("missing `slot`")? as usize,
+                    ),
+                };
+                self.pending_editor = Some(key);
+                self.needs_sync = true;
+                text(json!({"ok": true}))
             }
             other => Err(format!("unknown action `{other}`")),
         }

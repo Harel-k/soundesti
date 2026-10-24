@@ -168,7 +168,10 @@ impl App {
             .min_size(vec2(110.0, STEP_H))
             .stroke(if sel { Stroke::new(1.5, Color32::WHITE) } else { Stroke::NONE });
         let resp = ui.add(name).on_hover_text("Click: open instrument · Right-click: channel menu");
-        if resp.clicked() {
+        if resp.clicked() && ch.instrument.plugin.is_some() {
+            self.select_channel(id, ui.input(|i| i.modifiers.ctrl));
+            self.open_plugin_editor(soundesti_session::PluginKey::Channel(id));
+        } else if resp.clicked() {
             self.select_channel(id, ui.input(|i| i.modifiers.ctrl));
             if !self.win.instruments.insert(id) {
                 self.win.instruments.remove(&id);

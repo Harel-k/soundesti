@@ -77,6 +77,7 @@ impl App {
     }
 
     pub fn save_to(&mut self, path: PathBuf) -> bool {
+        self.session.capture_plugin_states(&mut self.project);
         match soundesti_project::save(&self.project, &path) {
             Ok(()) => {
                 self.saved_revision = self.revision;
@@ -241,6 +242,7 @@ impl App {
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
+        self.session.capture_plugin_states(&mut self.project);
         match soundesti_project::save(&self.project, &path) {
             Ok(()) => log::info!("autosaved to {}", path.display()),
             Err(e) => self.set_status(format!("Autosave failed: {e}")),
