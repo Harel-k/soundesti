@@ -397,7 +397,9 @@ impl App {
                     notes.push(n);
                     let idx = notes.len() - 1;
                     let kind = if self.piano.tool == Tool::Paint {
-                        DragKind::Paint { next_tick: start + len }
+                        DragKind::Paint {
+                            next_tick: start + len.max(if self.snap > 0 { self.snap } else { TICKS_PER_STEP / 4 }),
+                        }
                     } else {
                         DragKind::Move { anchor_tick: tick, anchor_key: key, originals: vec![(idx, n)], lead: idx }
                     };
@@ -534,12 +536,15 @@ impl App {
             DragKind::Paint { next_tick } => {
                 let t = v.tick(p.x).max(0.0) as Tick;
                 let len = self.piano.last_len.max(1);
+                // Paint advances by at least one snap unit (or 1/4 step without snap), so a
+                // tiny last-used length can't flood the pattern with overlapping notes.
+                let stride = len.max(if snap > 0 { snap } else { TICKS_PER_STEP / 4 });
                 let key = v.key(p.y).clamp(0, 127) as u8;
                 while t >= *next_tick {
                     let mut n = Note::new(*next_tick, len, key);
                     n.selected = true;
                     self.pr_notes(ch).push(n);
-                    *next_tick += len;
+                    *next_tick += stride;
                     drag.changed = true;
                     self.needs_sync = true;
                 }

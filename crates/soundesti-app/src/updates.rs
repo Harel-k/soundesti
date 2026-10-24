@@ -98,13 +98,12 @@ impl App {
         self.update = UpdateState::Downloading { rx };
     }
 
-    /// Launches the verified installer in update mode and quits (asking to save first).
+    /// Asks to save unsaved work, then quits and launches the verified installer in update
+    /// mode. The installer is only started once quitting is confirmed.
     pub fn restart_to_update(&mut self) {
         let UpdateState::Ready(path) = &self.update else { return };
-        match std::process::Command::new(path).arg("--update").spawn() {
-            Ok(_) => self.request(AfterConfirm::Quit),
-            Err(e) => self.set_status(format!("Could not start the updater: {e}")),
-        }
+        let path = path.clone();
+        self.request(AfterConfirm::QuitAndUpdate(path));
     }
 
     pub fn update_menu(&mut self, ui: &mut egui::Ui) {

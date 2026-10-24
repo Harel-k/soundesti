@@ -112,14 +112,26 @@ fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
     }
     let tmp = path.with_extension("sdtmp");
     std::fs::write(&tmp, data).map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        if e.kind() == std::io::ErrorKind::PermissionDenied {
-            format!("{} is in use. Please close Soundesti and try again.", path.display())
-        } else {
-            format!("cannot replace {}: {e}", path.display())
+    // A file can stay locked for a few seconds while Soundesti is closing (the in-app
+    // updater quits the app right after launching us), so retry before giving up.
+    let mut attempts = 0;
+    loop {
+        match std::fs::rename(&tmp, path) {
+            Ok(()) => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && attempts < 60 => {
+                attempts += 1;
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    format!("{} is in use. Please close Soundesti and try again.", path.display())
+                } else {
+                    format!("cannot replace {}: {e}", path.display())
+                });
+            }
         }
-    })
+    }
 }
 
 /// Installs (or reinstalls/repairs) `payload` with `opts`. `self_exe` is copied in as the
@@ -275,12 +287,14 @@ fn remove_empty_dirs(dir: &Path) {
     let _ = std::fs::remove_dir(dir);
 }
 
-/// Deletes the install folder a few seconds after we exit (the running uninstaller
-/// cannot delete itself).
+/// Deletes the running uninstaller a few seconds after we exit (it cannot delete itself),
+/// then removes the install folder only if it is now empty. Never recursive: files the
+/// user put in the folder (songs, presets) are left alone.
 fn schedule_delete(dir: &Path) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let cmd = format!("ping -n 4 127.0.0.1 >nul & rmdir /s /q \"{}\"", dir.display());
+    let exe = dir.join(UNINSTALLER_EXE);
+    let cmd = format!("ping -n 4 127.0.0.1 >nul & del /f /q \"{}\" & rmdir \"{}\"", exe.display(), dir.display());
     let _ = std::process::Command::new("cmd").args(["/C", &cmd]).creation_flags(CREATE_NO_WINDOW).spawn();
 }
 

@@ -13,7 +13,7 @@ use soundesti_commands::Command;
 use soundesti_project::{ChannelId, History, Project};
 use soundesti_session::Session;
 use soundesti_shortcuts::{Context, InputState, Keymap, typing_piano_offset};
-use soundesti_timeline::{BarBeatTick, PPQ, TICKS_PER_STEP, Tick};
+use soundesti_timeline::{BarStepTick, PPQ, TICKS_PER_STEP, Tick};
 
 use crate::files::ExportJob;
 use crate::input::chord_from_egui;
@@ -105,6 +105,8 @@ pub enum AfterConfirm {
     New,
     Open(Option<PathBuf>),
     Quit,
+    /// Quit, then run the downloaded installer in update mode.
+    QuitAndUpdate(PathBuf),
 }
 
 pub struct App {
@@ -679,9 +681,20 @@ impl App {
                 self.needs_sync = true;
             }
             let tick = self.shared.position_tick().max(0.0) as Tick;
-            let bbt = BarBeatTick::from_tick(tick, self.project.time_signature);
-            ui.label(RichText::new(bbt.to_string()).monospace().size(18.0).color(theme::ACCENT))
-                .on_hover_text("Song position (bar:beat:tick)");
+            let bst = BarStepTick::from_tick(tick, self.project.time_signature);
+            ui.label(RichText::new(bst.to_string()).monospace().size(18.0).color(theme::ACCENT))
+                .on_hover_text("Song position (B:S:T = bars:steps:ticks, FL Studio format)");
+            // FL's toolbar master volume (same control as the Mixer master fader).
+            let mut mv = self.project.mixer[0].volume;
+            let tip = format!("Master volume {:+.1} dB", 20.0 * mv.max(1e-6).log10());
+            let r = crate::widgets::knob(ui, &mut mv, 0.0, 1.25, 0.8, 22.0, theme::ACCENT, &tip);
+            if r.started {
+                self.checkpoint("Master volume");
+            }
+            if r.changed {
+                self.project.mixer[0].volume = mv;
+                self.needs_sync = true;
+            }
             let met = ui.add(egui::Button::new("Metronome").selected(self.project.metronome)).on_hover_text("Ctrl+M");
             if met.clicked() {
                 self.run(&ui.ctx().clone(), Command::ToggleMetronome, None);
@@ -846,6 +859,22 @@ impl App {
                 }
                 if self.menu_item(ui, Command::ToggleSongInfo, "Project info…") {
                     self.run(&ctx, Command::ToggleSongInfo, None);
+                }
+            });
+            ui.menu_button("TOOLS", |ui| {
+                // FL's TOOLS menu; only tools that exist are listed (see FL_COMPATIBILITY_MATRIX.md).
+                if ui.button("Quantizer…").clicked() {
+                    self.win.quantize = true;
+                    ui.close();
+                }
+                for (c, label) in [
+                    (Command::ToggleTypingKeyboard, "Typing keyboard to piano"),
+                    (Command::Panic, "Stop all sound (panic)"),
+                    (Command::ExportWav, "Render pattern to WAV…"),
+                ] {
+                    if self.menu_item(ui, c, label) {
+                        self.run(&ctx, c, None);
+                    }
                 }
             });
             ui.menu_button("HELP", |ui| {

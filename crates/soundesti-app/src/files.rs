@@ -148,6 +148,15 @@ impl App {
                 self.quit_confirmed = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
+            AfterConfirm::QuitAndUpdate(installer) => {
+                match std::process::Command::new(&installer).arg("--update").spawn() {
+                    Ok(_) => {
+                        self.quit_confirmed = true;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                    Err(e) => self.set_status(format!("Could not start the updater: {e}")),
+                }
+            }
         }
     }
 

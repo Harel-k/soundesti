@@ -76,6 +76,38 @@ impl std::fmt::Display for BarBeatTick {
     }
 }
 
+/// FL Studio's default song-position format, bars:steps:ticks ("B:S:T").
+/// Steps are 1/16 notes; ticks are shown at FL's 24-per-step resolution (96 PPQ),
+/// independent of Soundesti's finer internal PPQ.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BarStepTick {
+    pub bar: i64,
+    pub step: i64,
+    pub tick: i64,
+}
+
+/// Ticks per step in FL's B:S:T display.
+pub const DISPLAY_TICKS_PER_STEP: i64 = 24;
+
+impl BarStepTick {
+    pub fn from_tick(tick: Tick, ts: TimeSignature) -> Self {
+        let bar_len = ts.ticks_per_bar();
+        let bar = tick.div_euclid(bar_len);
+        let in_bar = tick.rem_euclid(bar_len);
+        Self {
+            bar: bar + 1,
+            step: in_bar / TICKS_PER_STEP + 1,
+            tick: (in_bar % TICKS_PER_STEP) * DISPLAY_TICKS_PER_STEP / TICKS_PER_STEP,
+        }
+    }
+}
+
+impl std::fmt::Display for BarStepTick {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{:02}:{:02}", self.bar, self.step, self.tick)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TempoPoint {
     pub tick: Tick,
@@ -225,6 +257,16 @@ mod tests {
         let t = BarBeatTick::from_tick(ts.ticks_per_bar() + PPQ * 2 + 17, ts);
         assert_eq!((t.bar, t.beat, t.tick), (2, 3, 17));
         assert_eq!(t.to_tick(ts), ts.ticks_per_bar() + PPQ * 2 + 17);
+    }
+
+    #[test]
+    fn fl_style_bar_step_tick() {
+        let ts = TimeSignature::default();
+        assert_eq!(BarStepTick::from_tick(0, ts).to_string(), "1:01:00");
+        // Bar 2, step 5, half a step in = 12 of FL's 24 ticks.
+        let t = ts.ticks_per_bar() + 4 * TICKS_PER_STEP + TICKS_PER_STEP / 2;
+        assert_eq!(BarStepTick::from_tick(t, ts).to_string(), "2:05:12");
+        assert_eq!(BarStepTick::from_tick(ts.ticks_per_bar() - 1, ts).to_string(), "1:16:23");
     }
 
     #[test]
