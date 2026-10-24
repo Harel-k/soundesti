@@ -172,6 +172,7 @@ fn rpc_error(id: &Value, code: i64, message: &str) -> Value {
 
 /// Handles one JSON-RPC message (or batch). Returns `None` for notifications.
 pub fn handle_message(body: &str, dispatch: &dyn Fn(&str, Value) -> ToolResult) -> Option<String> {
+    let body = body.trim_start_matches('\u{feff}');
     let parsed: Value = match serde_json::from_str(body) {
         Ok(v) => v,
         Err(e) => return Some(rpc_error(&Value::Null, -32700, &format!("parse error: {e}")).to_string()),
@@ -227,6 +228,102 @@ fn handle_one(msg: Value, dispatch: &dyn Fn(&str, Value) -> ToolResult) -> Optio
     Some(json!({"jsonrpc": "2.0", "id": id, "result": result}))
 }
 
+fn stop_std_handle_inheritance() {
+    use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
+    use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
+    for which in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        // SAFETY: plain Win32 calls on this process's own standard handles.
+        unsafe {
+            let h = GetStdHandle(which);
+            if !h.is_null() {
+                SetHandleInformation(h, HANDLE_FLAG_INHERIT, 0);
+            }
+        }
+    }
+}
+
+/// Sends one JSON-RPC message to the running server. Returns the reply body (None for 202).
+fn post_to_server(port: u16, body: &str) -> std::io::Result<Option<String>> {
+    let mut s = TcpStream::connect(("127.0.0.1", port))?;
+    s.set_read_timeout(Some(CALL_TIMEOUT + Duration::from_secs(5)))?;
+    write!(
+        s,
+        "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    )?;
+    let mut resp = String::new();
+    s.read_to_string(&mut resp)?;
+    let (head, payload) = resp.split_once("\r\n\r\n").unwrap_or((&resp, ""));
+    let status = head.split_whitespace().nth(1).unwrap_or("");
+    Ok(match status {
+        "200" => Some(payload.to_string()),
+        "202" => None,
+        other => {
+            Some(rpc_error(&Value::Null, -32000, &format!("Soundesti MCP server answered HTTP {other}")).to_string())
+        }
+    })
+}
+
+/// `soundesti.exe --mcp-stdio`: a stdio⇄HTTP bridge for MCP clients that can only launch
+/// programs (e.g. Claude Desktop). Reads newline-delimited JSON-RPC from stdin, forwards it
+/// to the running app, and writes replies to stdout. If Soundesti isn't running (or AI
+/// control is off), it launches Soundesti with `--mcp` once and waits for it.
+pub fn run_stdio_bridge(port: u16) -> i32 {
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+    let mut launched = false;
+    for line in stdin.lock().lines() {
+        let Ok(line) = line else { break };
+        // Some Windows clients prefix their first write with a UTF-8 byte-order mark.
+        let line = line.trim_start_matches('\u{feff}').to_string();
+        if line.trim().is_empty() {
+            continue;
+        }
+        let mut reply = post_to_server(port, &line);
+        if reply.is_err() && !launched {
+            launched = true;
+            // Our stdin/stdout are the AI client's pipes. Windows children inherit every
+            // inheritable handle, so the long-lived app would keep those pipes open and the
+            // client would never see this bridge's output end. Make them non-inheritable first.
+            stop_std_handle_inheritance();
+            if let Ok(exe) = std::env::current_exe() {
+                let _ = std::process::Command::new(exe)
+                    .arg("--mcp")
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn();
+            }
+            for _ in 0..60 {
+                std::thread::sleep(Duration::from_millis(500));
+                reply = post_to_server(port, &line);
+                if reply.is_ok() {
+                    break;
+                }
+            }
+        }
+        let out = match reply {
+            Ok(Some(body)) => body,
+            Ok(None) => continue,
+            Err(_) => {
+                // Only requests (with an id) get an error reply; notifications are dropped.
+                let id = serde_json::from_str::<Value>(&line).ok().and_then(|v| v.get("id").cloned());
+                match id {
+                    Some(id) => {
+                        rpc_error(&id, -32000, "Soundesti is not running or AI control (OPTIONS > AI control) is off")
+                            .to_string()
+                    }
+                    None => continue,
+                }
+            }
+        };
+        if writeln!(stdout, "{}", out.trim()).and_then(|_| stdout.flush()).is_err() {
+            break;
+        }
+    }
+    0
+}
+
 pub fn base64_encode(data: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
@@ -251,6 +348,10 @@ mod tests {
         } else {
             Err("boom".into())
         }
+    }
+
+    fn call_raw(body: &str) -> Value {
+        serde_json::from_str(&handle_message(body, &echo).unwrap()).unwrap()
     }
 
     fn call(body: Value) -> Value {
@@ -286,6 +387,8 @@ mod tests {
         assert_eq!(r["error"]["code"], -32602);
         let r = call(json!({"jsonrpc":"2.0","id":6,"method":"bogus"}));
         assert_eq!(r["error"]["code"], -32601);
+        let bom = call_raw("\u{feff}{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"ping\"}");
+        assert!(bom.get("result").is_some(), "a leading BOM must be ignored: {bom}");
         let bad: Value = serde_json::from_str(&handle_message("{not json", &echo).unwrap()).unwrap();
         assert_eq!(bad["error"]["code"], -32700);
     }

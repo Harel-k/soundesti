@@ -32,9 +32,10 @@ Next: finish Phase 2 gaps, then Phase 3 (Playlist / song mode).
 | App icon (music note in a crystal), embedded in both exes, window/taskbar, shortcuts | rendered and reviewed at 16–256 px |
 
 | Bug hunt + FL 1:1 gap audit (docs/AUDIT.md): 6 bugs fixed (installer data loss, update races, paint flood, MCP socket reset, B:S:T clock), TOOLS menu, toolbar master volume | tests + manual checks |
-| **Built-in MCP server** (docs/MCP.md): 23 tools, all 193 commands, screenshots, local-only, off by default | 5 unit tests + live AI-style session 2026-10-24 |
+| **Built-in MCP server** (docs/MCP.md): 23 tools, all 194 commands, screenshots, local-only, off by default | unit tests + live AI-style session 2026-10-24 |
+| **AI assistant setup** window (HELP menu): exact steps + Copy + one-click setup for Claude Code, Codex, Cursor, VS Code, Windsurf, Gemini CLI, Claude Desktop; built-in `--mcp-stdio` bridge | 4 unit tests; live bridge test with app auto-launch |
 
-**Automated tests: 113 passing** (`scripts\test.ps1`), plus 1 ignored real-device test (passing).
+**Automated tests: 117 passing** (`scripts\test.ps1`), plus 1 ignored real-device test (passing).
 
 ## Not done / known gaps (honest list)
 - Playlist / song mode, pattern clips, arrangement (Phase 3) — placeholder window only.

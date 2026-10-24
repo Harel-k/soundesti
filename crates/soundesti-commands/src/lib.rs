@@ -118,6 +118,7 @@ commands! {
     CenterOnPlayhead => "view.center_on_playhead", View, "Center view on playhead";
     GridColor => "view.grid_color", View, "Grid color";
     Help => "help.open", Help, "Help";
+    AiSetup => "view.ai_setup", Help, "AI assistant setup (MCP)";
 
     // Pattern selector
     SelectPattern => "pattern.select", Pattern, "Select pattern 1-9";

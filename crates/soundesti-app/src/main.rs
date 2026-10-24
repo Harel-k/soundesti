@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod ai_setup;
 mod app;
 mod channel_rack;
 mod files;
@@ -14,6 +15,11 @@ mod updates;
 mod widgets;
 
 fn main() -> eframe::Result {
+    // `--mcp-stdio`: run only the MCP stdio bridge (no window); stdout belongs to the protocol.
+    if std::env::args().any(|a| a == "--mcp-stdio") {
+        let port = std::env::var("SOUNDESTI_MCP_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(mcp::DEFAULT_PORT);
+        std::process::exit(mcp::run_stdio_bridge(port));
+    }
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

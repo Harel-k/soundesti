@@ -43,6 +43,7 @@ const WINDOWS: &[&str] = &[
     "shortcuts",
     "quantizer",
     "export",
+    "ai_setup",
 ];
 
 pub fn tool_definitions() -> Vec<Value> {
@@ -517,6 +518,7 @@ impl App {
                     "shortcuts" => &mut w.help,
                     "quantizer" => &mut w.quantize,
                     "export" => &mut w.export,
+                    "ai_setup" => &mut w.ai_setup,
                     other => return Err(format!("unknown window `{other}`")),
                 };
                 *slot = open;

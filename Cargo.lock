@@ -3740,6 +3740,7 @@ dependencies = [
  "soundesti-synthesis",
  "soundesti-timeline",
  "soundesti-updater",
+ "windows-sys 0.61.2",
  "winresource",
 ]
 

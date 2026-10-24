@@ -115,6 +115,14 @@ impl App {
             .show(ctx, |ui| self.quantize_window(ui));
         self.win.quantize = open;
 
+        let mut open = self.win.ai_setup;
+        egui::Window::new("AI assistant setup")
+            .id(Id::unique("w_ai_setup"))
+            .open(&mut open)
+            .default_size([640.0, 480.0])
+            .show(ctx, |ui| egui::ScrollArea::vertical().show(ui, |ui| self.ai_setup_ui(ui)));
+        self.win.ai_setup = open;
+
         let mut open = self.win.export;
         egui::Window::new("Render to WAV")
             .id(Id::unique("w_export"))

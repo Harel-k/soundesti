@@ -89,6 +89,7 @@ pub struct Windows {
     pub help: bool,
     pub quantize: bool,
     pub export: bool,
+    pub ai_setup: bool,
     pub instruments: BTreeSet<ChannelId>,
 }
 
@@ -165,6 +166,7 @@ pub struct App {
     /// Built-in MCP server for AI control (None = off).
     pub mcp: Option<crate::mcp::McpServer>,
     pub mcp_enabled: bool,
+    pub ai_setup: crate::ai_setup::AiSetupState,
 }
 
 pub const MCP_KEY: &str = "soundesti.mcp";
@@ -250,6 +252,7 @@ impl App {
             auto_update,
             mcp: None,
             mcp_enabled: false,
+            ai_setup: Default::default(),
             project,
         };
         if mcp_enabled {
@@ -518,6 +521,7 @@ impl App {
             ToggleSongInfo => self.win.song_info = !self.win.song_info,
             ToggleMidiSettings => self.win.midi_settings = !self.win.midi_settings,
             Help => self.win.help = !self.win.help,
+            AiSetup => self.win.ai_setup = !self.win.ai_setup,
             CloseAllWindows => {
                 let w = &mut self.win;
                 w.channel_rack = false;
@@ -897,6 +901,13 @@ impl App {
                     .changed()
                 {
                     self.set_mcp(&ctx, ai);
+                    if ai {
+                        self.win.ai_setup = true;
+                    }
+                }
+                if ui.button("Set up AI assistants…").clicked() {
+                    self.win.ai_setup = true;
+                    ui.close();
                 }
                 if ui.button("Audio settings…").clicked() {
                     self.device_names =
@@ -930,6 +941,10 @@ impl App {
             ui.menu_button("HELP", |ui| {
                 if self.menu_item(ui, Command::Help, "Keyboard shortcuts…") {
                     self.run(&ctx, Command::Help, None);
+                }
+                if ui.button("AI assistant setup (Claude, Codex, Cursor…)").clicked() {
+                    self.win.ai_setup = true;
+                    ui.close();
                 }
                 ui.separator();
                 self.update_menu(ui);
