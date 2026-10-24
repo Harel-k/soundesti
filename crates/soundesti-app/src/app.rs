@@ -477,9 +477,13 @@ impl App {
             SaveAs => self.save(true),
             SaveNewVersion => self.save_new_version(),
             ExportWav => self.start_export(),
-            ExportMp3 => self.set_status(
-                "MP3 export is not available yet: encoder licensing review pending (docs/LICENSE_AUDIT.md).",
-            ),
+            ExportMp3 => {
+                self.export_opts.format = soundesti_export::Format::Mp3 { kbps: 320 };
+                self.export_opts.sample_rate = self.export_opts.sample_rate.min(48_000);
+                self.start_export();
+            }
+            ExportMidi => self.export_midi(),
+            PrImportMidi => self.import_midi_to_channel(),
 
             // Undo
             UndoToggle => self.undo_toggle(),
@@ -890,6 +894,12 @@ impl App {
                         self.request(AfterConfirm::Open(Some(p)));
                     } else {
                         self.set_status("No autosave yet.");
+                    }
+                    ui.close();
+                }
+                if ui.button("Import MIDI file…").on_hover_text("Adds the file's parts as channels in a new pattern").clicked() {
+                    if let Some(p) = rfd::FileDialog::new().add_filter("MIDI file", &["mid", "midi"]).pick_file() {
+                        self.import_midi(&p);
                     }
                     ui.close();
                 }

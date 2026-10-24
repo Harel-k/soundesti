@@ -16,8 +16,8 @@
 "file.save_as" = "IMPLEMENTED"
 "file.save_new_version" = "TESTED"        # next_version_path test
 "file.export_wav" = "TESTED"              # soundesti-export tests
-"file.export_mp3" = "BLOCKED"             # encoder licensing review
-"file.export_midi" = "PLANNED"
+"file.export_mp3" = "TESTED"               # flac_and_mp3_files_are_valid
+"file.export_midi" = "TESTED"              # export_then_import_round_trips
 "transport.play_pause" = "IMPLEMENTED"
 "transport.toggle_metronome" = "TESTED"   # engine metronome test
 "transport.panic" = "TESTED"              # engine panic test
@@ -117,3 +117,4 @@
 "browser.replace_channel" = "IMPLEMENTED"
 "browser.preview_previous" = "IMPLEMENTED"
 "browser.preview_next" = "IMPLEMENTED"
+"pianoroll.import_midi" = "IMPLEMENTED"

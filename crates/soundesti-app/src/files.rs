@@ -56,6 +56,9 @@ pub fn next_version_path(path: &Path) -> PathBuf {
     }
 }
 
+/// (name, instrument type, General MIDI keys, instrument params) for MIDI drum import.
+type DrumGroup = (&'static str, &'static str, &'static [u8], &'static [(&'static str, f32)]);
+
 impl App {
     pub fn save(&mut self, choose: bool) {
         let path = match (&self.path, choose) {
@@ -130,7 +133,7 @@ impl App {
             AfterConfirm::Open(path) => {
                 let path = path.or_else(|| {
                     rfd::FileDialog::new()
-                        .add_filter("Projects (Soundesti, FL Studio)", &[FILE_EXTENSION, "flp"])
+                        .add_filter("Projects (Soundesti, FL Studio, MIDI)", &[FILE_EXTENSION, "flp", "mid", "midi"])
                         .add_filter("Soundesti project", &[FILE_EXTENSION])
                         .add_filter("FL Studio project", &["flp"])
                         .pick_file()
@@ -138,6 +141,13 @@ impl App {
                 let Some(path) = path else { return };
                 if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("flp")) {
                     self.import_flp(&path);
+                    return;
+                }
+                if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("mid") || e.eq_ignore_ascii_case("midi")) {
+                    self.session.send(EngineCmd::Stop);
+                    self.replace_project(Project::empty(), None);
+                    self.import_midi(&path);
+                    self.saved_revision = self.revision.wrapping_sub(1);
                     return;
                 }
                 match soundesti_project::load(&path) {
@@ -175,6 +185,148 @@ impl App {
                     Err(e) => self.set_status(format!("Could not start the updater: {e}")),
                 }
             }
+        }
+    }
+
+    /// Adds a MIDI file to the project: one channel per part, in a new pattern named after
+    /// the file. General MIDI drum parts become Soundesti drum synths split by sound.
+    pub fn import_midi(&mut self, path: &std::path::Path) {
+        let song = match std::fs::read(path)
+            .map_err(|e| e.to_string())
+            .and_then(|d| soundesti_midi_file::read(&d).map_err(|e| e.to_string()))
+        {
+            Ok(s) => s,
+            Err(e) => {
+                self.dialog = Some(Dialog::Message {
+                    title: "Could not import MIDI file".into(),
+                    text: format!("{}: {e}", path.display()),
+                });
+                return;
+            }
+        };
+        if song.parts.iter().all(|p| p.notes.is_empty()) {
+            self.set_status("That MIDI file has no notes.");
+            return;
+        }
+        self.checkpoint("Import MIDI file");
+        if let Some(bpm) = song.bpm {
+            self.project.bpm = bpm.clamp(10.0, 522.0);
+        }
+        if let Some(ts) = song.time_signature {
+            self.project.time_signature = ts;
+        }
+        let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "MIDI".into());
+        // Reuse an empty current pattern, else start a new one.
+        let pid =
+            if self.project.current().is_empty() { self.project.current_pattern } else { self.project.add_pattern() };
+        if let Some(p) = self.project.pattern_mut(pid) {
+            p.name = stem.clone();
+        }
+        let mut channels = 0;
+        let drum_word = |s: &str| ["drum", "fpc", "perc", "kit", "beat"].iter().any(|w| s.to_lowercase().contains(w));
+        for part in song.parts.iter().filter(|p| !p.notes.is_empty()) {
+            // GM drum channel, or a part/file that says it is drums (FPC loops use channel 1).
+            if part.channel == 9 || drum_word(&part.name) || drum_word(&stem) {
+                // GM drum map: 35/36 kick, 37-40 snare/clap, 42/44/46 hats, cymbals 49-59.
+                let groups: [DrumGroup; 4] = [
+                    ("Kick", "soundesti.kickr", &[35, 36], &[]),
+                    ("Snare", "soundesti.clapper", &[37, 38, 40], &[("mode.claps", 0.0)]),
+                    ("Clap", "soundesti.clapper", &[39], &[("mode.claps", 3.0)]),
+                    ("Hats", "soundesti.hatz", &[42, 44, 46, 49, 51, 52, 53, 55, 57, 59], &[]),
+                ];
+                for (name, ty, keys, params) in groups {
+                    let notes: Vec<_> = part.notes.iter().filter(|n| keys.contains(&n.key)).collect();
+                    if notes.is_empty() {
+                        continue;
+                    }
+                    let id = self.project.add_channel(format!("{} {name}", part.name), ty);
+                    if let Some(c) = self.project.channel_mut(id) {
+                        for (k, v) in params {
+                            c.instrument.params.insert(k.to_string(), *v);
+                        }
+                    }
+                    let open = [46u8, 49, 51, 52, 53, 55, 57, 59];
+                    let list = self.project.pattern_mut(pid).unwrap().notes_mut(id);
+                    for n in notes {
+                        let mut note = soundesti_project::Note::new(
+                            n.start,
+                            n.length,
+                            if open.contains(&n.key) { 72 } else { 60 },
+                        );
+                        note.velocity = n.velocity;
+                        list.push(note);
+                    }
+                    channels += 1;
+                }
+            } else {
+                let id = self.project.add_channel(&part.name, "soundesti.trident");
+                let list = self.project.pattern_mut(pid).unwrap().notes_mut(id);
+                for n in &part.notes {
+                    let mut note = soundesti_project::Note::new(n.start, n.length, n.key);
+                    note.velocity = n.velocity;
+                    list.push(note);
+                }
+                channels += 1;
+            }
+        }
+        if let Some(p) = self.project.pattern_mut(pid) {
+            for pc in &mut p.channels {
+                pc.notes.sort_by_key(|n| (n.start, n.key));
+            }
+        }
+        self.project.current_pattern = pid;
+        self.needs_sync = true;
+        self.set_status(format!("Imported {} ({channels} channels) into pattern \"{stem}\".", path.display()));
+    }
+
+    /// Piano roll Ctrl+M: every note of a MIDI file into the selected channel.
+    pub fn import_midi_to_channel(&mut self) {
+        let Some(ch) = self.selected_channel else { return };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("MIDI file", &["mid", "midi"])
+            .set_title("Import MIDI into this channel")
+            .pick_file()
+        else {
+            return;
+        };
+        match std::fs::read(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|d| soundesti_midi_file::read(&d).map_err(|e| e.to_string()))
+        {
+            Ok(song) => {
+                self.checkpoint("Import MIDI into channel");
+                let list = self.project.current_mut().notes_mut(ch);
+                for n in song.parts.iter().flat_map(|p| &p.notes) {
+                    let mut note = soundesti_project::Note::new(n.start, n.length, n.key);
+                    note.velocity = n.velocity;
+                    list.push(note);
+                }
+                list.sort_by_key(|n| (n.start, n.key));
+                self.needs_sync = true;
+                self.set_status(format!("Imported notes from {}.", path.display()));
+            }
+            Err(e) => self.set_status(format!("Could not import MIDI: {e}")),
+        }
+    }
+
+    /// File > Export MIDI (Ctrl+Shift+M): the song if the Playlist has clips, else the pattern.
+    pub fn export_midi(&mut self) {
+        let song = self.project.song_mode && !self.project.playlist.clips.is_empty();
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("MIDI file", &["mid"])
+            .set_file_name(format!("{}.mid", self.title_or_untitled()))
+            .save_file()
+            .map(|p| with_extension(p, "mid"))
+        else {
+            return;
+        };
+        match std::fs::write(&path, soundesti_midi_file::write(&self.project, song)) {
+            Ok(()) => self.set_status(format!(
+                "Exported {} as MIDI ({}).",
+                path.display(),
+                if song { "song" } else { "current pattern" }
+            )),
+            Err(e) => self.set_status(format!("Could not write {}: {e}", path.display())),
         }
     }
 

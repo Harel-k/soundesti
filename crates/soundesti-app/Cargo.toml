@@ -27,6 +27,7 @@ soundesti-shortcuts.workspace = true
 soundesti-synthesis.workspace = true
 soundesti-effects.workspace = true
 soundesti-flp.workspace = true
+soundesti-midi-file.workspace = true
 soundesti-plugin-host.workspace = true
 raw-window-handle = "0.6"
 midir = "0.11"

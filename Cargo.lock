@@ -4055,6 +4055,7 @@ dependencies = [
  "soundesti-effects",
  "soundesti-export",
  "soundesti-flp",
+ "soundesti-midi-file",
  "soundesti-plugin-api",
  "soundesti-plugin-host",
  "soundesti-project",
@@ -4142,6 +4143,15 @@ dependencies = [
  "windows-sys 0.61.2",
  "winreg",
  "winresource",
+]
+
+[[package]]
+name = "soundesti-midi-file"
+version = "0.4.0"
+dependencies = [
+ "soundesti-project",
+ "soundesti-session",
+ "soundesti-timeline",
 ]
 
 [[package]]

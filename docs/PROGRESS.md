@@ -45,13 +45,14 @@ Next: automation clips, insert-to-insert routing and sends, piano-roll tool suit
 | **MIDI keyboard input** (MIDI settings, F10): any MIDI input device plays the selected channel; the device is remembered | builds; not yet tried with a hardware keyboard (none on the dev PC) |
 | **Recording** (R / record button): notes from the MIDI or typing keyboard are recorded into the current pattern (one undo step per pass, loop-aware); optional audio recording from the default input into a new Sampler channel placed where the take started | recording-position unit test; audio capture not yet tried on hardware |
 | **Export**: pattern or full song (Playlist), WAV 16/24/32f, FLAC 16/24 (flacenc), MP3 128-320 kbps (LAME), stems (one file per mixer track) | 9 export tests (song length, FLAC/MP3 validity, stem separation); manual check: imported FL demo song exported to MP3 (130 s) |
+| **MIDI files**: import (File menu, Open, piano roll Ctrl+M; GM and FPC-style drum parts become Kickr/Clapper/Hatz), export (Ctrl+Shift+M, song or pattern, format 1, GM drum channel) | 3 tests (round trip, running status/other PPQ, fuzzed truncation); manual check with an FL FPC drum loop |
 | **AI assistant setup** window (HELP menu): exact steps + Copy + one-click setup for Claude Code, Codex, Cursor, VS Code, Windsurf, Gemini CLI, Claude Desktop; built-in `--mcp-stdio` bridge | 4 unit tests; live bridge test with app auto-launch |
 
 **Automated tests: 152 passing** (`scripts\test.ps1`), plus 1 ignored real-device test (passing).
 
 ## Not done / known gaps (honest list)
 - Playlist: no audio or automation clips, time markers, performance mode or clip-level transpose yet; song export works (WAV/FLAC/MP3/stems).
-- Audio clips in the Playlist (recordings become Sampler channels instead), recording latency compensation, MIDI output, MIDI import/export.
+- Audio clips in the Playlist (recordings become Sampler channels instead), recording latency compensation, MIDI output to external devices.
 - Mixer: sends, insert-to-insert routing, sidechain, PDC and automation are not implemented; effects have generic knob panels (no custom graphical editors yet).
 - .flp import: automation clips, audio clips, mixer settings/effects and FL plugin sounds are not imported (FL's plugin data is private).
 - Plugins run inside Soundesti's process (no sandbox yet): a crashing plugin closes Soundesti. No plugin automation, sidechain or multi-output routing yet; plugin settings are not part of undo. FLAC/MP3 export. Browser shows WAV only (no presets, projects or plugin database).

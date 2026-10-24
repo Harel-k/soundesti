@@ -1,0 +1,11 @@
+[package]
+name = "soundesti-midi-file"
+description = "Standard MIDI File (.mid) import and export."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+soundesti-project.workspace = true
+soundesti-session.workspace = true
+soundesti-timeline.workspace = true

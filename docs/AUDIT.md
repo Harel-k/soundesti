@@ -47,7 +47,7 @@ installer repair/upgrade file cleanup, update tamper rejection.
 | Chords, scales, ghost-note swapping | Stamp chords, scale highlighting, double-right-click ghost to swap channel | Missing (ghost display exists) |
 | Channel Rack | Groups (Alt+G), zip/unzip, swing knob, graph editor, per-channel step count, "+" plugin list, channel settings window | Missing |
 | Pattern management | Clone/delete pattern, pattern colours, pattern picker | Partial (new/rename/select) |
-| MIDI | Device input, MIDI import Ctrl+M, export Ctrl+Shift+M | Missing |
+| MIDI | Device input, MIDI import Ctrl+M, export Ctrl+Shift+M | **Done** (device input, file import/export); no MIDI output yet |
 | Export | Song export, MP3 Ctrl+Shift+R, FLAC, stems | **Done**: pattern/song, WAV/FLAC/MP3, stems |
 | Numpad / L-R modifier shortcuts | Pattern select on numpad, Num+/-, typing octave, slice/quantize gestures | Blocked (KI-002) |
 

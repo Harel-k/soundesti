@@ -4,7 +4,7 @@
 
 Source: [FL Studio manual - shortcuts](https://www.image-line.com/fl-studio-learning-content/fl-studio-online-manual/html/basics_shortcuts.htm), fetched 2026-10-24. Every keyboard row on that page is present; mouse gestures are tracked in MOUSE_GESTURES.md.
 
-**Totals (276 bindings):** BLOCKED: 17 | IMPLEMENTED: 133 | PLANNED: 101 | TESTED: 25
+**Totals (276 bindings):** BLOCKED: 16 | IMPLEMENTED: 134 | PLANNED: 99 | TESTED: 27
 
 Automated coverage: `soundesti-shortcuts` tests load this profile, reject conflicts, assert every row resolves to its own command in its context, check the master prompt's mandatory mappings, text-field suppression and typing-keyboard suppression.
 
@@ -38,8 +38,8 @@ Automated coverage: `soundesti-shortcuts` tests load this profile, reject confli
 | `Ctrl+R` | `file.export_wav` |  | File Operations | TESTED |
 | `Ctrl+S` | `file.save` |  | File Operations | TESTED |
 | `Ctrl+Shift+H` | `view.arrange_windows` |  | File Operations / Window Navigation | PLANNED |
-| `Ctrl+Shift+M` | `file.export_midi` |  | File Operations | PLANNED |
-| `Ctrl+Shift+R` | `file.export_mp3` |  | File Operations | BLOCKED |
+| `Ctrl+Shift+M` | `file.export_midi` |  | File Operations | TESTED |
+| `Ctrl+Shift+R` | `file.export_mp3` |  | File Operations | TESTED |
 | `Ctrl+Shift+S` | `file.save_as` |  | File Operations | IMPLEMENTED |
 | `Num1` | `pattern.select` | 1 | Pattern Selector | BLOCKED |
 | `Num2` | `pattern.select` | 2 | Pattern Selector | BLOCKED |
@@ -283,7 +283,7 @@ Automated coverage: `soundesti-shortcuts` tests load this profile, reject confli
 | `Ctrl+L` | `pianoroll.quick_legato` |  | Piano roll | IMPLEMENTED |
 | `Ctrl+Left` | `edit.select_time_before` |  | Piano roll | PLANNED |
 | `Ctrl+Right` | `edit.select_time_after` |  | Piano roll | PLANNED |
-| `Ctrl+M` | `pianoroll.import_midi` |  | Piano roll | PLANNED |
+| `Ctrl+M` | `pianoroll.import_midi` |  | Piano roll | IMPLEMENTED |
 | `Ctrl+Alt+Q` | `pianoroll.quick_quantize` |  | Piano roll | IMPLEMENTED |
 | `Ctrl+Q` | `pianoroll.quick_quantize` |  | Piano roll | IMPLEMENTED |
 | `Ctrl+Enter` | `edit.select_time_around` |  | Piano roll | PLANNED |
