@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 # Confirmed by the owner 2026-10-24 (docs/DECISIONS.md D-008).
 license = "GPL-3.0-or-later"
@@ -22,6 +22,7 @@ soundesti-session = { path = "crates/soundesti-session" }
 soundesti-commands = { path = "crates/soundesti-commands" }
 soundesti-shortcuts = { path = "crates/soundesti-shortcuts" }
 soundesti-export = { path = "crates/soundesti-export" }
+soundesti-effects = { path = "crates/soundesti-effects" }
 
 # external (versions verified on crates.io 2026-10-24, see docs/DECISIONS.md)
 eframe = { version = "0.37", features = ["persistence"] }

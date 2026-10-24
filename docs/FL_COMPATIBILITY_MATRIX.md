@@ -9,13 +9,13 @@ Shortcut-level detail: SHORTCUT_MATRIX.md. Gesture detail: MOUSE_GESTURES.md.
 | Space play/stop, stop rewinds to pattern start | TESTED | T engine, M 2026-10-24 | |
 | Ctrl+Space play/pause | IMPLEMENTED | — | |
 | Pattern mode looping | TESTED | T pattern_loops | |
-| Song mode (L) | BLOCKED | — | needs Playlist; command refuses with message |
+| Song mode (L) | TESTED | T song_mode_plays_playlist_clips | PAT/SONG toggle in the toolbar |
 | BPM 10–522, live tempo change keeps position | TESTED | T tempo tests | FL range per manual is similar; exact limits unverified |
 | Metronome (Ctrl+M), accent on bar | TESTED | T metronome | count-in/precount PLANNED |
 | Panic (Ctrl+H) | TESTED | T panic | |
 | Typing keyboard to piano (Ctrl+T) | IMPLEMENTED | T suppression | layout parity unverified (SM-5) |
 | Ctrl+Z toggle undo/redo, Ctrl+Alt+Z step undo | TESTED | T history, M 2026-10-24 | |
-| Window toggles F5–F12, Alt+F8, Esc, Tab | IMPLEMENTED | T dispatch | Playlist/Browser/MIDI windows are labelled placeholders |
+| Window toggles F5–F12, Alt+F8, Esc, Tab | IMPLEMENTED | T dispatch | MIDI settings window is a labelled placeholder |
 | Hint bar | IMPLEMENTED | M | shows status + focus context |
 
 ## Channel Rack
@@ -47,7 +47,8 @@ Shortcut-level detail: SHORTCUT_MATRIX.md. Gesture detail: MOUSE_GESTURES.md.
 |---|---|---|
 | Master + 125 inserts, faders, pan, mute, solo, peak meters | TESTED | T routing/meters |
 | Channel → insert routing, link (Ctrl+L), select linked, move tracks, rename | IMPLEMENTED | T routing |
-| Effect slots, sends, sidechain, PDC, stereo separation, record arm | PLANNED | — |
+| Effect slots (10 per track, bypass, reorder) | TESTED | T insert_effects_process_and_bypass, mixer_effects_follow_the_project | 9 native effects |
+| Sends, sidechain, PDC, stereo separation, record arm | PLANNED | — |
 
 ## Files & export
 | Behaviour | Status | Evidence |

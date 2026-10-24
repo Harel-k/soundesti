@@ -4,15 +4,19 @@ A free, offline, Rust-native digital audio workstation with an FL Studio-style w
 the same window layout, keyboard shortcuts and editing gestures experienced FL users know,
 built from scratch with original code, instruments and artwork.
 
-> Status: **early development (Phase 1–2)**. See [docs/PROGRESS.md](docs/PROGRESS.md) for
+> Status: **early development (Phases 1–4 in progress)**. See [docs/PROGRESS.md](docs/PROGRESS.md) for
 > exactly what works today and what does not.
 
 ## What works today
 - Real-time audio engine (WASAPI via CPAL) with sample-accurate note scheduling, looping, metronome, panic.
-- Channel Rack step sequencer, Piano roll (draw/paint/delete/mute/slice/select/zoom tools, velocity lane, undo), Mixer (master + 125 inserts with faders, pan, mute, solo, meters).
-- **Trident** — an original 3-oscillator subtractive synth.
+- Channel Rack step sequencer, Piano roll (draw/paint/delete/mute/slice/select/zoom tools, velocity lane, undo).
+- **Playlist** with pattern clips and song mode (PAT/SONG), FL-style tools and gestures.
+- **Mixer**: master + 125 inserts with faders, pan, mute, solo, meters and **10 insert effect slots** per track.
+- **Instruments** (all original): Sampler, Kickr, Clapper, Hatz, Orbit (FM), Harpa (plucked string), Trident (subtractive).
+- **Effects** (all original): EQ, Filter, Compressor, Limiter, Delay, Reverb, Chorus, Distortion, Utility.
+- **Browser** with click-to-preview and drag-to-Channel-Rack, plus the bundled *Soundesti Essentials* pack of 32 original one-shots.
 - Save/open `.soundesti` projects (atomic saves, backups, autosave), WAV export (16/24/32-bit).
-- 276 FL Studio shortcuts loaded from a machine-readable profile; 147 implemented so far.
+- 276 FL Studio shortcuts loaded from a machine-readable profile; 156 implemented so far.
 - **AI control:** a built-in MCP server lets Claude and other AI assistants drive every command in the app ([docs/MCP.md](docs/MCP.md)).
 - Installer Wizard with repair / update / uninstall, and automatic updates from GitHub Releases.
 

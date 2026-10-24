@@ -8,9 +8,11 @@
 
 mod file;
 mod history;
+pub mod playlist;
 
 pub use file::{FILE_EXTENSION, FORMAT_VERSION, ProjectError, load, save};
 pub use history::History;
+pub use playlist::{Clip, Playlist, PlaylistTrack};
 
 use serde::{Deserialize, Serialize};
 use soundesti_timeline::{TICKS_PER_STEP, Tick, TimeSignature};
@@ -46,6 +48,9 @@ pub struct InstrumentState {
     /// Parameter values by persistent parameter key.
     #[serde(default)]
     pub params: BTreeMap<String, f32>,
+    /// Audio file for sample-based instruments (absolute path).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -193,6 +198,73 @@ pub struct MixerTrack {
     pub volume: f32,
     pub pan: f32,
     pub muted: bool,
+    /// Insert effects, sorted by slot (only filled slots are stored).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<EffectSlot>,
+}
+
+/// Number of insert effect slots per mixer track (as in FL Studio).
+pub const FX_SLOTS: usize = 10;
+
+/// One effect in a mixer track's insert chain.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EffectSlot {
+    /// 0..FX_SLOTS, top to bottom in the mixer's slot list.
+    pub slot: u8,
+    pub type_id: String,
+    /// Parameter values by stable key; missing keys use the effect's defaults.
+    #[serde(default)]
+    pub params: BTreeMap<String, f32>,
+    #[serde(default)]
+    pub bypass: bool,
+}
+
+impl MixerTrack {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into(), color: None, volume: 0.8, pan: 0.0, muted: false, effects: Vec::new() }
+    }
+
+    pub fn effect(&self, slot: usize) -> Option<&EffectSlot> {
+        self.effects.iter().find(|e| e.slot as usize == slot)
+    }
+
+    pub fn effect_mut(&mut self, slot: usize) -> Option<&mut EffectSlot> {
+        self.effects.iter_mut().find(|e| e.slot as usize == slot)
+    }
+
+    /// Puts a fresh effect in `slot`, replacing what was there.
+    pub fn set_effect(&mut self, slot: usize, type_id: &str) {
+        if slot >= FX_SLOTS {
+            return;
+        }
+        self.effects.retain(|e| e.slot as usize != slot);
+        self.effects.push(EffectSlot {
+            slot: slot as u8,
+            type_id: type_id.into(),
+            params: BTreeMap::new(),
+            bypass: false,
+        });
+        self.effects.sort_by_key(|e| e.slot);
+    }
+
+    pub fn remove_effect(&mut self, slot: usize) {
+        self.effects.retain(|e| e.slot as usize != slot);
+    }
+
+    /// Moves the effect in `from` to `to` (swapping with whatever is there).
+    pub fn move_effect(&mut self, from: usize, to: usize) {
+        if from >= FX_SLOTS || to >= FX_SLOTS {
+            return;
+        }
+        for e in &mut self.effects {
+            if e.slot as usize == from {
+                e.slot = to as u8;
+            } else if e.slot as usize == to {
+                e.slot = from as u8;
+            }
+        }
+        self.effects.sort_by_key(|e| e.slot);
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -209,6 +281,11 @@ pub struct Project {
     pub mixer: Vec<MixerTrack>,
     #[serde(default)]
     pub metronome: bool,
+    /// Song mode plays the Playlist; pattern mode loops the current pattern (FL's L key).
+    #[serde(default)]
+    pub song_mode: bool,
+    #[serde(default)]
+    pub playlist: Playlist,
     next_channel_id: u32,
     next_pattern_id: u32,
 }
@@ -234,14 +311,8 @@ impl Default for Project {
 impl Project {
     /// An empty project: one pattern, master + 125 inserts, no channels.
     pub fn empty() -> Self {
-        let mut mixer = vec![MixerTrack { name: "Master".into(), color: None, volume: 0.8, pan: 0.0, muted: false }];
-        mixer.extend((1..=INSERT_TRACKS).map(|i| MixerTrack {
-            name: format!("Insert {i}"),
-            color: None,
-            volume: 0.8,
-            pan: 0.0,
-            muted: false,
-        }));
+        let mut mixer = vec![MixerTrack::new("Master")];
+        mixer.extend((1..=INSERT_TRACKS).map(|i| MixerTrack::new(format!("Insert {i}"))));
         Self {
             format_version: FORMAT_VERSION,
             meta: ProjectMeta::default(),
@@ -252,15 +323,24 @@ impl Project {
             current_pattern: PatternId(1),
             mixer,
             metronome: false,
+            song_mode: false,
+            playlist: Playlist::default(),
             next_channel_id: 1,
             next_pattern_id: 2,
         }
     }
 
-    /// The default new-project template: one Trident channel.
+    /// The default new-project template, laid out like FL Studio's: Kick, Clap, Hat and
+    /// Snare channels (original drum synths instead of sample files).
     pub fn new() -> Self {
         let mut p = Self::empty();
-        p.add_channel("Trident", "soundesti.trident");
+        p.add_channel("Kick", "soundesti.kickr");
+        let clap = p.add_channel("Clap", "soundesti.clapper");
+        if let Some(c) = p.channel_mut(clap) {
+            c.instrument.params.insert("mode.claps".into(), 3.0);
+        }
+        p.add_channel("Hat", "soundesti.hatz");
+        p.add_channel("Snare", "soundesti.clapper");
         p
     }
 
@@ -272,7 +352,7 @@ impl Project {
             id,
             name: name.into(),
             color,
-            instrument: InstrumentState { type_id: instrument_type.into(), params: BTreeMap::new() },
+            instrument: InstrumentState { type_id: instrument_type.into(), params: BTreeMap::new(), sample: None },
             volume: 0.78,
             pan: 0.0,
             muted: false,
@@ -355,18 +435,21 @@ impl Project {
         if self.patterns.is_empty() {
             self.patterns.push(Pattern::new(PatternId(self.next_pattern_id.max(1)), "Pattern 1"));
         }
+        let pids: Vec<PatternId> = self.patterns.iter().map(|p| p.id).collect();
+        self.playlist.clips.retain(|c| pids.contains(&c.pattern) && c.length > 0 && c.start >= 0 && c.offset >= 0);
+        let max_track = self.playlist.clips.iter().map(|c| c.track as usize).max().unwrap_or(0);
+        self.playlist.ensure_track(max_track.max(playlist::DEFAULT_TRACKS - 1));
         if self.pattern(self.current_pattern).is_none() {
             self.current_pattern = self.patterns[0].id;
         }
         while self.mixer.len() < INSERT_TRACKS + 1 {
             let i = self.mixer.len();
-            self.mixer.push(MixerTrack {
-                name: format!("Insert {i}"),
-                color: None,
-                volume: 0.8,
-                pan: 0.0,
-                muted: false,
-            });
+            self.mixer.push(MixerTrack::new(format!("Insert {i}")));
+        }
+        for t in &mut self.mixer {
+            t.effects.retain(|e| (e.slot as usize) < FX_SLOTS);
+            t.effects.sort_by_key(|e| e.slot);
+            t.effects.dedup_by_key(|e| e.slot);
         }
         let max_track = self.mixer.len() as u16 - 1;
         let max_ch = self.channels.iter().map(|c| c.id.0).max().unwrap_or(0);
@@ -409,7 +492,8 @@ mod tests {
         let p = Project::new();
         assert_eq!(p.mixer.len(), 126);
         assert_eq!(p.mixer[0].name, "Master");
-        assert_eq!(p.channels.len(), 1);
+        let names: Vec<&str> = p.channels.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["Kick", "Clap", "Hat", "Snare"], "FL-style default kit");
         assert_eq!(p.current().name, "Pattern 1");
     }
 

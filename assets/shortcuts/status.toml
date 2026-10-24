@@ -23,7 +23,7 @@
 "transport.panic" = "TESTED"              # engine panic test
 "transport.playhead_to_start" = "IMPLEMENTED"
 "transport.toggle_typing_keyboard" = "TESTED"  # shortcut suppression tests
-"transport.toggle_song_mode" = "PARTIAL"  # refuses honestly until the Playlist exists
+"transport.toggle_song_mode" = "TESTED"   # song_mode_plays_playlist_clips (session)
 "transport.toggle_record" = "PLANNED"
 "typing.octave" = "BLOCKED"               # numpad keys indistinguishable (KI-002)
 "snap.toggle_none" = "IMPLEMENTED"
@@ -31,8 +31,8 @@
 "view.toggle_channel_rack" = "IMPLEMENTED"
 "view.toggle_piano_roll" = "IMPLEMENTED"
 "view.toggle_mixer" = "IMPLEMENTED"
-"view.toggle_playlist" = "PARTIAL"        # placeholder window
-"view.toggle_browser" = "PARTIAL"         # placeholder window
+"view.toggle_playlist" = "IMPLEMENTED"
+"view.toggle_browser" = "IMPLEMENTED"
 "view.toggle_midi_settings" = "PARTIAL"   # placeholder window
 "view.plugin_picker" = "IMPLEMENTED"
 "view.toggle_song_info" = "IMPLEMENTED"
@@ -111,3 +111,9 @@
 "mixer.rename" = "IMPLEMENTED"
 "mixer.move_left" = "IMPLEMENTED"
 "mixer.move_right" = "IMPLEMENTED"
+"playlist.slice_at_cursor" = "TESTED"           # slicing_keeps_content_continuous
+"playlist.select_by_source" = "IMPLEMENTED"
+"playlist.quick_quantize_starts" = "IMPLEMENTED"
+"browser.replace_channel" = "IMPLEMENTED"
+"browser.preview_previous" = "IMPLEMENTED"
+"browser.preview_next" = "IMPLEMENTED"

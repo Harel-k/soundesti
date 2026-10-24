@@ -30,10 +30,12 @@ impl App {
         let steps = (self.project.current().length_ticks(ts) / TICKS_PER_STEP).max(16);
         let ids: Vec<ChannelId> = self.project.channels.iter().map(|c| c.id).collect();
         let mut open_piano: Option<ChannelId> = None;
+        let mut dropped: Option<(Option<ChannelId>, std::path::PathBuf)> = None;
+        let dragging_sample = egui::DragAndDrop::has_payload_of_type::<crate::browser::DraggedSample>(ui.ctx());
 
         egui::ScrollArea::both().auto_shrink([false, true]).show(ui, |ui| {
             for (row, id) in ids.iter().copied().enumerate() {
-                ui.horizontal(|ui| {
+                let row_resp = ui.horizontal(|ui| {
                     ui.set_height(STEP_H + 2.0);
                     self.channel_controls(ui, id, row);
                     let notes = self.project.current().notes(id).to_vec();
@@ -53,8 +55,45 @@ impl App {
                         self.select_channel(id, additive);
                     }
                 });
+                // Dropping a Browser sample on a row replaces that channel's sound.
+                let r = ui.interact(row_resp.response.rect, ui.scope_id().with(("rack_drop", id.0)), Sense::hover());
+                if dragging_sample && r.contains_pointer() {
+                    ui.painter().rect_stroke(
+                        r.rect,
+                        2.0,
+                        egui::Stroke::new(1.5, theme::ACCENT),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+                if let Some(p) = r.dnd_release_payload::<crate::browser::DraggedSample>() {
+                    dropped = Some((Some(id), p.0.clone()));
+                }
+            }
+            // The empty area below the rows adds a new channel.
+            let (rest, _) = ui.allocate_exact_size(
+                vec2(ui.available_width(), ui.available_height().clamp(STEP_H * 2.0, 300.0)),
+                Sense::hover(),
+            );
+            let r = ui.interact(rest, ui.scope_id().with("rack_drop_new"), Sense::hover());
+            if dragging_sample && r.contains_pointer() {
+                ui.painter().rect_stroke(rest, 2.0, egui::Stroke::new(1.5, theme::ACCENT), egui::StrokeKind::Inside);
+                ui.painter().text(
+                    rest.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "Drop to add a new channel",
+                    egui::FontId::proportional(13.0),
+                    theme::ACCENT,
+                );
+            }
+            if let Some(p) = r.dnd_release_payload::<crate::browser::DraggedSample>() {
+                dropped = Some((None, p.0.clone()));
             }
         });
+        match dropped {
+            Some((Some(id), path)) => self.set_channel_sample(id, &path),
+            Some((None, path)) => self.add_sample_channel(&path),
+            None => {}
+        }
         // End any step-paint gesture once the buttons are released.
         if ui.input(|i| !i.pointer.any_down())
             && let Some(p) = self.rack_paint.take()
@@ -65,12 +104,7 @@ impl App {
 
         ui.horizontal(|ui| {
             ui.menu_button(RichText::new(" + Add ").strong(), |ui| {
-                for (type_id, name) in soundesti_synthesis::INSTRUMENT_TYPES {
-                    if ui.button(format!("🎹 {name}")).clicked() {
-                        self.add_channel(type_id, name);
-                        ui.close();
-                    }
-                }
+                self.instrument_menu(ui);
             })
             .response
             .on_hover_text("Add a channel");

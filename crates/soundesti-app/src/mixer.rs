@@ -1,8 +1,10 @@
-//! Mixer: master + 125 insert strips with faders, pan, mute, solo and live meters.
-//! Routing: every insert feeds the master (insert-to-insert sends arrive in Phase 4).
+//! Mixer: master + 125 insert strips with faders, pan, mute, solo and live meters, plus the
+//! selected track's 10 insert effect slots on the right (FL Studio's layout).
+//! Routing: every insert feeds the master (insert-to-insert sends are not implemented yet).
 
-use egui::{RichText, Sense, Stroke, StrokeKind, Ui, vec2};
+use egui::{Layout, RichText, Sense, Stroke, StrokeKind, Ui, vec2};
 use soundesti_commands::Command;
+use soundesti_project::FX_SLOTS;
 
 use crate::app::{App, Dialog};
 use crate::{theme, widgets};
@@ -21,6 +23,29 @@ impl App {
             .max()
             .unwrap_or(0);
         let shown = (last_used + 8).clamp(16, self.project.mixer.len() - 1);
+        let inserts_w = 220.0;
+        let strips_w = (ui.available_width() - inserts_w - 12.0).max(120.0);
+        ui.horizontal_top(|ui| {
+            ui.allocate_ui_with_layout(
+                vec2(strips_w, ui.available_height()),
+                Layout::top_down(egui::Align::Min),
+                |ui| {
+                    self.mixer_strips(ui, shown);
+                },
+            );
+            ui.separator();
+            ui.allocate_ui_with_layout(
+                vec2(inserts_w, ui.available_height()),
+                Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_width(inserts_w);
+                    self.insert_slots_ui(ui);
+                },
+            );
+        });
+    }
+
+    fn mixer_strips(&mut self, ui: &mut Ui, shown: usize) {
         egui::ScrollArea::horizontal().auto_shrink([false, true]).show(ui, |ui| {
             ui.horizontal(|ui| {
                 for i in 0..=shown {
@@ -41,13 +66,150 @@ impl App {
                 RichText::new(if routed.is_empty() {
                     "no channels routed".to_string()
                 } else {
-                    format!("← {}", routed.join(", "))
+                    format!("from {}", routed.join(", "))
                 })
                 .color(theme::TEXT_DIM)
                 .small(),
             );
-            ui.label(RichText::new("Effect slots and sends: Phase 4").color(theme::TEXT_DIM).small());
         });
+    }
+
+    /// The selected track's insert chain: 10 slots, processed top to bottom before the fader.
+    fn insert_slots_ui(&mut self, ui: &mut Ui) {
+        let t = self.selected_track;
+        let track = self.project.mixer[t].clone();
+        ui.label(RichText::new(format!("{} - inserts", track.name)).strong().color(theme::ACCENT));
+        for slot in 0..FX_SLOTS {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("{}", slot + 1)).small().color(theme::TEXT_DIM));
+                match track.effect(slot) {
+                    Some(fx) => {
+                        let name = soundesti_effects::info(&fx.type_id).map(|i| i.name).unwrap_or("Unknown effect");
+                        if widgets::led(ui, !fx.bypass, "Enable / bypass this effect").clicked() {
+                            self.checkpoint("Bypass effect");
+                            if let Some(e) = self.project.mixer[t].effect_mut(slot) {
+                                e.bypass = !e.bypass;
+                            }
+                            self.needs_sync = true;
+                        }
+                        let text = RichText::new(name).color(if fx.bypass { theme::TEXT_DIM } else { theme::TEXT });
+                        let r = ui
+                            .add_sized(
+                                [150.0, 20.0],
+                                egui::Button::new(text).selected(self.win.effects.contains(&(t, slot))),
+                            )
+                            .on_hover_text("Click to open; right-click for options");
+                        if r.clicked() && !self.win.effects.remove(&(t, slot)) {
+                            self.win.effects.insert((t, slot));
+                        }
+                        r.context_menu(|ui| {
+                            ui.menu_button("Replace", |ui| self.effect_menu(ui, t, slot));
+                            if slot > 0 && ui.button("Move up").clicked() {
+                                self.move_effect(t, slot, slot - 1);
+                                ui.close();
+                            }
+                            if slot + 1 < FX_SLOTS && ui.button("Move down").clicked() {
+                                self.move_effect(t, slot, slot + 1);
+                                ui.close();
+                            }
+                            if ui.button("Delete").clicked() {
+                                self.checkpoint("Remove effect");
+                                self.project.mixer[t].remove_effect(slot);
+                                self.win.effects.remove(&(t, slot));
+                                self.needs_sync = true;
+                                ui.close();
+                            }
+                        });
+                    }
+                    None => {
+                        ui.add_space(18.0);
+                        ui.scope(|ui| {
+                            ui.set_width(150.0);
+                            ui.menu_button(RichText::new("(empty)").color(theme::TEXT_DIM), |ui| {
+                                self.effect_menu(ui, t, slot)
+                            })
+                            .response
+                            .on_hover_text("Choose an effect for this slot");
+                        });
+                    }
+                }
+            });
+        }
+        ui.label(RichText::new("Effects run top to bottom, before the fader.").small().color(theme::TEXT_DIM));
+    }
+
+    /// Catalog of native effects grouped by category; choosing one fills `slot`.
+    pub fn effect_menu(&mut self, ui: &mut Ui, track: usize, slot: usize) {
+        let mut last = "";
+        for info in soundesti_effects::CATALOG {
+            if info.category != last {
+                if !last.is_empty() {
+                    ui.separator();
+                }
+                last = info.category;
+                ui.label(RichText::new(info.category).small().color(theme::TEXT_DIM));
+            }
+            if ui.button(info.name).on_hover_text(info.description).clicked() {
+                self.set_effect(track, slot, info.type_id);
+                ui.close();
+            }
+        }
+    }
+
+    pub fn set_effect(&mut self, track: usize, slot: usize, type_id: &str) {
+        if track >= self.project.mixer.len() || slot >= FX_SLOTS || soundesti_effects::info(type_id).is_none() {
+            return;
+        }
+        self.checkpoint("Add effect");
+        self.project.mixer[track].set_effect(slot, type_id);
+        self.win.effects.insert((track, slot));
+        self.needs_sync = true;
+    }
+
+    fn move_effect(&mut self, track: usize, from: usize, to: usize) {
+        self.checkpoint("Move effect");
+        self.project.mixer[track].move_effect(from, to);
+        let (a, b) = (self.win.effects.remove(&(track, from)), self.win.effects.remove(&(track, to)));
+        if a {
+            self.win.effects.insert((track, to));
+        }
+        if b {
+            self.win.effects.insert((track, from));
+        }
+        self.needs_sync = true;
+    }
+
+    /// Body of a floating effect window (knobs for every parameter).
+    pub fn effect_ui(&mut self, ui: &mut Ui, track: usize, slot: usize) {
+        let Some(fx) = self.project.mixer.get(track).and_then(|t| t.effect(slot)).cloned() else { return };
+        let params = soundesti_effects::params_for(&fx.type_id);
+        ui.horizontal(|ui| {
+            if widgets::led(ui, !fx.bypass, "Enable / bypass").clicked() {
+                self.checkpoint("Bypass effect");
+                if let Some(e) = self.project.mixer[track].effect_mut(slot) {
+                    e.bypass = !e.bypass;
+                }
+                self.needs_sync = true;
+            }
+            ui.label(RichText::new(if fx.bypass { "Bypassed" } else { "Active" }).small().color(theme::TEXT_DIM));
+            if ui.small_button("Reset").on_hover_text("Set every parameter back to its default").clicked() {
+                self.checkpoint("Reset effect");
+                if let Some(e) = self.project.mixer[track].effect_mut(slot) {
+                    e.params.clear();
+                }
+                self.needs_sync = true;
+            }
+        });
+        let edit = crate::params_ui::param_grid(ui, ("fx", track, slot), params, &fx.params, theme::ACCENT);
+        if edit.started {
+            self.checkpoint("Effect parameter");
+        }
+        if let Some((key, v)) = edit.changed
+            && let Some(e) = self.project.mixer[track].effect_mut(slot)
+        {
+            e.params.insert(key.to_string(), v);
+            self.needs_sync = true;
+        }
     }
 
     fn mixer_strip(&mut self, ui: &mut Ui, i: usize) {

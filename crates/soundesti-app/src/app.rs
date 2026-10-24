@@ -18,8 +18,8 @@ use soundesti_timeline::{BarStepTick, PPQ, TICKS_PER_STEP, Tick};
 use crate::files::ExportJob;
 use crate::input::chord_from_egui;
 use crate::piano_roll::PianoRoll;
-use crate::theme;
 use crate::widgets::MeterState;
+use crate::{icons, theme};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tool {
@@ -48,15 +48,15 @@ impl Tool {
         }
     }
 
-    pub fn icon(self) -> &'static str {
+    pub fn icon(self) -> icons::Icon {
         match self {
-            Tool::Draw => "✏",
-            Tool::Paint => "🖌",
-            Tool::Delete => "✖",
-            Tool::Mute => "🔇",
-            Tool::Slice => "✂",
-            Tool::Select => "⬚",
-            Tool::Zoom => "🔍",
+            Tool::Draw => icons::Icon::Pencil,
+            Tool::Paint => icons::Icon::Brush,
+            Tool::Delete => icons::Icon::Erase,
+            Tool::Mute => icons::Icon::Mute,
+            Tool::Slice => icons::Icon::Slice,
+            Tool::Select => icons::Icon::Select,
+            Tool::Zoom => icons::Icon::Zoom,
         }
     }
 }
@@ -91,6 +91,8 @@ pub struct Windows {
     pub export: bool,
     pub ai_setup: bool,
     pub instruments: BTreeSet<ChannelId>,
+    /// Open effect windows as (mixer track, slot).
+    pub effects: BTreeSet<(usize, usize)>,
 }
 
 pub enum Dialog {
@@ -134,6 +136,8 @@ pub struct App {
     pub selected_channel: Option<ChannelId>,
     pub selected_channels: BTreeSet<ChannelId>,
     pub piano: PianoRoll,
+    pub playlist: crate::playlist::PlaylistView,
+    pub browser: crate::browser::BrowserView,
     pub selected_track: usize,
     pub track_meters: Vec<MeterState>,
     pub channel_meters: Vec<MeterState>,
@@ -218,11 +222,14 @@ impl App {
             audio_settings,
             device_names: soundesti_audio_device::list_output_devices().into_iter().map(|d| d.name).collect(),
             audio_error: err.map(|e| e.to_string()),
-            win: Windows { channel_rack: true, piano_roll: true, ..Default::default() },
+            // FL's default layout: Playlist in the background, Channel Rack floating on top.
+            win: Windows { channel_rack: true, playlist: true, ..Default::default() },
             window_layers: HashMap::new(),
             selected_channel: selected,
             selected_channels: selected.into_iter().collect(),
             piano: PianoRoll::default(),
+            playlist: Default::default(),
+            browser: crate::browser::BrowserView::new(),
             selected_track: 1,
             track_meters: vec![MeterState::default(); soundesti_audio::MIXER_TRACKS],
             channel_meters: vec![MeterState::default(); 256],
@@ -476,7 +483,13 @@ impl App {
                 }
             }
             ToggleSongMode => {
-                self.set_status("Song mode needs the Playlist (Phase 3). Staying in pattern mode.");
+                self.project.song_mode = !self.project.song_mode;
+                self.needs_sync = true;
+                self.set_status(if self.project.song_mode {
+                    "Song mode: playing the Playlist"
+                } else {
+                    "Pattern mode: looping the current pattern"
+                });
             }
             ToggleRecord => self.set_status("Recording is not implemented yet (Phase 5)."),
             ToggleMetronome => {
@@ -536,9 +549,10 @@ impl App {
                 w.help = false;
                 w.quantize = false;
                 w.instruments.clear();
+                w.effects.clear();
             }
             CloseWindow => {
-                if self.piano.cancel_drag(&mut self.project) {
+                if self.piano.cancel_drag(&mut self.project) || self.playlist.cancel_drag(&mut self.project) {
                     self.needs_sync = true;
                     self.set_status("Edit cancelled.");
                 } else {
@@ -578,6 +592,9 @@ impl App {
 
             // Tools (focused editor)
             ToolDraw | ToolPaint | ToolDelete | ToolMute | ToolSlice | ToolSelect | ToolZoom => {
+                if self.focus == Context::Playlist {
+                    return self.playlist_command(cmd);
+                }
                 if self.focus != Context::PianoRoll {
                     return false;
                 }
@@ -597,6 +614,8 @@ impl App {
                     Context::PianoRoll => self.piano_command(cmd),
                     Context::ChannelRack => self.rack_command(cmd, arg),
                     Context::Mixer => self.mixer_command(cmd),
+                    Context::Playlist => self.playlist_command(cmd),
+                    Context::Browser => self.browser_command(cmd),
                     _ => false,
                 };
             }
@@ -695,21 +714,25 @@ impl App {
         ui.horizontal(|ui| {
             ui.label(RichText::new("SOUNDESTI").strong().color(theme::ACCENT));
             ui.separator();
-            // Pattern / song mode (song mode arrives with the Playlist).
-            ui.add_enabled(false, egui::Button::new("SONG")).on_disabled_hover_text("Song mode arrives with the Playlist (Phase 3)");
-            ui.add(egui::Button::new(RichText::new("PAT").color(theme::ACCENT)).selected(true));
+            // Pattern / song mode (L).
+            let song = self.project.song_mode;
+            if icons::text_button(ui, icons::Icon::Pattern, "PAT", !song).on_hover_text("Pattern mode: loop the current pattern (L)").clicked() && song {
+                self.run(&ui.ctx().clone(), Command::ToggleSongMode, None);
+            }
+            if icons::text_button(ui, icons::Icon::Song, "SONG", song).on_hover_text("Song mode: play the Playlist arrangement (L)").clicked() && !song {
+                self.run(&ui.ctx().clone(), Command::ToggleSongMode, None);
+            }
             let playing = self.shared.playing.load(Ordering::Relaxed);
-            let play = ui
-                .add(egui::Button::new(RichText::new(if playing { "⏸" } else { "▶" }).size(16.0)).selected(playing))
-                .on_hover_text("Play / stop (Space)");
-            if play.clicked() {
+            let icon = if playing { icons::Icon::Pause } else { icons::Icon::Play };
+            if icons::button(ui, icon, playing, "Play / stop (Space)").clicked() {
                 self.play_stop();
             }
-            if ui.add(egui::Button::new(RichText::new("⏹").size(16.0))).on_hover_text("Stop").clicked() {
+            if icons::button(ui, icons::Icon::Stop, false, "Stop").clicked() {
                 self.session.send(EngineCmd::Stop);
             }
-            ui.add_enabled(false, egui::Button::new(RichText::new("⏺").size(16.0)))
-                .on_disabled_hover_text("Recording is not implemented yet (Phase 5)");
+            ui.add_enabled_ui(false, |ui| icons::button(ui, icons::Icon::Record, false, "Recording (R)"))
+                .response
+                .on_disabled_hover_text("Audio recording is not available yet");
             ui.separator();
 
             let mut bpm = self.project.bpm;
@@ -738,14 +761,10 @@ impl App {
                 self.project.mixer[0].volume = mv;
                 self.needs_sync = true;
             }
-            let met = ui.add(egui::Button::new("Metronome").selected(self.project.metronome)).on_hover_text("Ctrl+M");
-            if met.clicked() {
+            if icons::button(ui, icons::Icon::Metronome, self.project.metronome, "Metronome (Ctrl+M)").clicked() {
                 self.run(&ui.ctx().clone(), Command::ToggleMetronome, None);
             }
-            let tp = ui
-                .add(egui::Button::new("⌨ Typing").selected(self.typing_piano))
-                .on_hover_text("Typing keyboard to piano (Ctrl+T)");
-            if tp.clicked() {
+            if icons::button(ui, icons::Icon::Keyboard, self.typing_piano, "Typing keyboard to piano (Ctrl+T)").clicked() {
                 self.run(&ui.ctx().clone(), Command::ToggleTypingKeyboard, None);
             }
             ui.separator();
@@ -761,13 +780,14 @@ impl App {
                     }
                 }
                 ui.separator();
-                if ui.button("➕ New pattern (F4)").clicked() {
+                if ui.button("New pattern (F4)").clicked() {
                     self.run(&ui.ctx().clone(), Command::NextEmptyPatternNamed, None);
                 }
             });
             // Snap.
             let snap_label = SNAPS.iter().find(|s| s.1 == self.snap).map(|s| s.0).unwrap_or("custom");
-            egui::ComboBox::from_id_salt("snap").selected_text(format!("🧲 {snap_label}")).width(96.0).show_ui(ui, |ui| {
+            icons::inline(ui, icons::Icon::Magnet, theme::TEXT_DIM);
+            egui::ComboBox::from_id_salt("snap").selected_text(snap_label).width(84.0).show_ui(ui, |ui| {
                 for (name, t) in SNAPS {
                     ui.selectable_value(&mut self.snap, *t, *name);
                 }
@@ -787,7 +807,8 @@ impl App {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(70.0, 14.0), egui::Sense::hover());
             horizontal_meter(ui, rect, m.left, m.right);
             if self.output.info.is_null {
-                ui.label(RichText::new("⚠ NO AUDIO").color(theme::WARN)).on_hover_text("No audio device could be opened. Options › Audio settings.");
+                icons::inline(ui, icons::Icon::Warning, theme::WARN);
+                ui.label(RichText::new("NO AUDIO").color(theme::WARN)).on_hover_text("No audio device could be opened. Options › Audio settings.");
             }
         });
     }
@@ -856,12 +877,7 @@ impl App {
                 }
             });
             ui.menu_button("ADD", |ui| {
-                for (type_id, name) in soundesti_synthesis::INSTRUMENT_TYPES {
-                    if ui.button(format!("🎹 {name}")).clicked() {
-                        self.add_channel(type_id, name);
-                        ui.close();
-                    }
-                }
+                self.instrument_menu(ui);
             });
             ui.menu_button("PATTERNS", |ui| {
                 for (c, label) in [
@@ -979,6 +995,62 @@ impl App {
         let id = self.project.add_channel(name, type_id);
         self.select_channel(id, false);
         self.set_status(format!("Added {name}."));
+        // A new Sampler is useless without audio: ask for a file straight away.
+        if type_id == soundesti_synthesis::sampler::TYPE_ID {
+            self.choose_sample(id);
+        }
+    }
+
+    /// Instrument list grouped by category (ADD menu and the Channel Rack "+").
+    pub fn instrument_menu(&mut self, ui: &mut Ui) {
+        let mut last = "";
+        for info in soundesti_synthesis::CATALOG {
+            if info.category != last {
+                if !last.is_empty() {
+                    ui.separator();
+                }
+                last = info.category;
+                ui.label(RichText::new(info.category).small().color(theme::TEXT_DIM));
+            }
+            if ui.button(info.name).on_hover_text(info.description).clicked() {
+                self.add_channel(info.type_id, info.name);
+                ui.close();
+            }
+        }
+    }
+
+    /// Opens a file dialog and assigns a WAV file to a Sampler channel.
+    pub fn choose_sample(&mut self, id: ChannelId) {
+        let Some(path) =
+            rfd::FileDialog::new().add_filter("WAV audio", &["wav"]).set_title("Choose a sample").pick_file()
+        else {
+            return;
+        };
+        self.set_channel_sample(id, &path);
+    }
+
+    /// Points a channel at an audio file (switching it to a Sampler if needed).
+    pub fn set_channel_sample(&mut self, id: ChannelId, path: &std::path::Path) {
+        if !soundesti_session::samples::is_supported(path) {
+            self.set_status(format!("{} is not a WAV file.", path.display()));
+            return;
+        }
+        if let Err(e) = soundesti_session::samples::load_wav(path) {
+            self.set_status(format!("Could not load sample: {e}"));
+            return;
+        }
+        self.checkpoint("Load sample");
+        let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        if let Some(c) = self.project.channel_mut(id) {
+            if c.instrument.type_id != soundesti_synthesis::sampler::TYPE_ID {
+                c.instrument.type_id = soundesti_synthesis::sampler::TYPE_ID.into();
+                c.instrument.params.clear();
+            }
+            c.instrument.sample = Some(path.display().to_string());
+            c.name = stem.clone();
+        }
+        self.set_status(format!("Loaded sample {stem}."));
+        self.needs_sync = true;
     }
 
     fn hint_bar(&mut self, ui: &mut Ui) {
@@ -991,7 +1063,8 @@ impl App {
                 Context::Mixer => "Mixer",
                 Context::Browser => "Browser",
             };
-            ui.label(RichText::new(format!("⌨ {focus}")).color(theme::ACCENT).monospace())
+            icons::inline(ui, icons::Icon::Keyboard, theme::ACCENT);
+            ui.label(RichText::new(focus).color(theme::ACCENT).monospace())
                 .on_hover_text("Keyboard focus: shortcuts for this window take priority");
             if let Some(srv) = &self.mcp {
                 ui.label(RichText::new(format!("AI :{}", srv.port)).color(theme::ACCENT).monospace())
@@ -1008,7 +1081,8 @@ impl App {
                         .small(),
                 );
                 if self.dirty() {
-                    ui.label(RichText::new("● unsaved").color(theme::WARN).small());
+                    ui.label(RichText::new("unsaved").color(theme::WARN).small());
+                    icons::inline(ui, icons::Icon::Dot, theme::WARN);
                 }
             });
         });

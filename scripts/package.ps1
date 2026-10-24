@@ -18,6 +18,8 @@ Copy-Item (Join-Path $root "target\release\soundesti.exe") $stage
 Copy-Item (Join-Path $root "LICENSE.txt") $stage
 Copy-Item (Join-Path $root "LICENSE") (Join-Path $stage "LICENSE-GPL-3.0.txt")
 Copy-Item (Join-Path $root "README.md") (Join-Path $stage "README.txt")
+# Original sample pack rendered by `cargo run -p soundesti-session --example make_pack`.
+Copy-Item -Recurse (Join-Path $root "assets\packs") (Join-Path $stage "Packs")
 
 Write-Host "3/4 Building installer with embedded payload..."
 $env:SOUNDESTI_PAYLOAD_DIR = $stage

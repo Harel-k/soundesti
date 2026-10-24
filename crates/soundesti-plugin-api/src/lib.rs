@@ -68,6 +68,51 @@ pub trait Instrument: Send {
 
     /// Number of voices currently sounding (for diagnostics and tests).
     fn active_voices(&self) -> usize;
+
+    /// Gives a sample-based instrument its audio. Returns the previous sample so the caller
+    /// can free it off the audio thread. Instruments that don't use samples hand it back.
+    fn set_sample(&mut self, sample: Option<std::sync::Arc<SampleData>>) -> Option<std::sync::Arc<SampleData>> {
+        sample
+    }
+}
+
+/// An insert effect. Runs on the audio thread: no allocation, locks or I/O in `process`,
+/// `set_param` or `set_tempo`.
+pub trait Effect: Send {
+    fn type_id(&self) -> &'static str;
+    fn display_name(&self) -> &'static str;
+    fn params(&self) -> &'static [ParamInfo];
+    fn get_param(&self, id: u32) -> f32;
+    fn set_param(&mut self, id: u32, value: f32);
+    /// Processes one stereo block in place.
+    fn process(&mut self, left: &mut [f32], right: &mut [f32]);
+    /// Project tempo, for tempo-synced effects.
+    fn set_tempo(&mut self, _bpm: f32) {}
+    /// Clears internal state (delay lines, envelopes), e.g. on transport stop.
+    fn reset(&mut self) {}
+}
+
+/// Decoded audio for sample-based instruments (stereo, any sample rate).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SampleData {
+    pub left: Vec<f32>,
+    pub right: Vec<f32>,
+    pub sample_rate: f32,
+    pub name: String,
+}
+
+impl SampleData {
+    pub fn len(&self) -> usize {
+        self.left.len().min(self.right.len())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn duration_seconds(&self) -> f32 {
+        self.len() as f32 / self.sample_rate.max(1.0)
+    }
 }
 
 /// Helper for instruments: splits a block at each event offset and calls `render`

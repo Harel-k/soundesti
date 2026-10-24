@@ -2,14 +2,18 @@
 
 mod ai_setup;
 mod app;
+mod browser;
 mod channel_rack;
 mod files;
+mod icons;
 mod input;
 mod mcp;
 mod mcp_tools;
 mod mixer;
 mod panels;
+mod params_ui;
 mod piano_roll;
+mod playlist;
 mod theme;
 mod updates;
 mod widgets;

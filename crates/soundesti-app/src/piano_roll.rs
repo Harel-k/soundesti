@@ -140,14 +140,12 @@ impl App {
         };
         ui.horizontal(|ui| {
             for t in Tool::ALL {
-                let r = ui.add(egui::Button::new(t.icon()).selected(self.piano.tool == t)).on_hover_text(t.label());
-                if r.clicked() {
+                if crate::icons::button(ui, t.icon(), self.piano.tool == t, t.label()).clicked() {
                     self.piano.tool = t;
                 }
             }
             ui.separator();
-            if ui
-                .add(egui::Button::new("👻 Ghosts").selected(self.piano.ghost))
+            if crate::icons::text_button(ui, crate::icons::Icon::Ghost, "Ghosts", self.piano.ghost)
                 .on_hover_text("Ghost channels (Alt+V)")
                 .clicked()
             {

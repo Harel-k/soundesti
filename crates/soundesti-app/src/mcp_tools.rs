@@ -151,6 +151,24 @@ pub fn tool_definitions() -> Vec<Value> {
             &["track"],
         ),
         tool(
+            "mixer_effect",
+            "Insert effects on a mixer track (10 slots, 0-9, processed top to bottom before the fader). Actions: catalog (list effect types and their params), list (a track's chain with values), add (put `effect` type id in `slot`), remove, set_param (`param` key + `value`), bypass (`bypass` bool), move (`slot` to `to`).",
+            json!({"action": {"type": "string", "enum": ["catalog", "list", "add", "remove", "set_param", "bypass", "move"]}, "track": {"type": "integer"}, "slot": {"type": "integer"}, "to": {"type": "integer"}, "effect": {"type": "string", "description": "Effect type id, e.g. soundesti.reverb"}, "param": {"type": "string"}, "value": {"type": "number"}, "bypass": {"type": "boolean"}}),
+            &["action"],
+        ),
+        tool(
+            "playlist",
+            "Arrange patterns in the Playlist and switch song mode (FL's PAT/SONG). Actions: list (clips), add_clip (`pattern`, `track` 0-based, `start` ticks, optional `length` ticks; defaults to the pattern's length), remove_clips (all clips overlapping `start`..`start+length` on `track`, or every clip of `pattern`), song_mode (`enabled` bool).",
+            json!({"action": {"type": "string", "enum": ["list", "add_clip", "remove_clips", "song_mode"]}, "pattern": {"type": "integer"}, "track": {"type": "integer"}, "start": {"type": "integer"}, "length": {"type": "integer"}, "enabled": {"type": "boolean"}}),
+            &["action"],
+        ),
+        tool(
+            "browser",
+            "Samples in the Browser. Actions: list (WAV files under `path`, default the bundled packs), preview (play `path` once), load (put `path` in a new Sampler channel, or in `channel` replacing its sound).",
+            json!({"action": {"type": "string", "enum": ["list", "preview", "load"]}, "path": {"type": "string"}, "channel": ch}),
+            &["action"],
+        ),
+        tool(
             "pattern",
             "Select, create or rename patterns.",
             json!({"action": {"type": "string", "enum": ["select", "new", "rename"]}, "pattern": {"type": "integer", "description": "Pattern id (select/rename)"}, "name": {"type": "string"}}),
@@ -502,6 +520,9 @@ impl App {
                 }
                 other => Err(format!("unknown action `{other}`")),
             },
+            "mixer_effect" => self.mcp_mixer_effect(a),
+            "playlist" => self.mcp_playlist(a),
+            "browser" => self.mcp_browser(a),
             "set_window" => {
                 let open = b(a, "open").ok_or("missing `open`")?;
                 let w = &mut self.win;
@@ -555,6 +576,194 @@ impl App {
         .inspect(|_| self.needs_sync = true)
     }
 
+    fn mcp_track(&self, a: &Value) -> Result<usize, String> {
+        let t = i(a, "track").ok_or("missing `track`")?;
+        if t < 0 || t as usize >= self.project.mixer.len() {
+            return Err(format!("track must be 0-{}", self.project.mixer.len() - 1));
+        }
+        Ok(t as usize)
+    }
+
+    fn mcp_mixer_effect(&mut self, a: &Value) -> ToolResult {
+        let slot_arg = |a: &Value| -> Result<usize, String> {
+            let s = i(a, "slot").ok_or("missing `slot`")?;
+            if !(0..soundesti_project::FX_SLOTS as i64).contains(&s) {
+                return Err(format!("slot must be 0-{}", soundesti_project::FX_SLOTS - 1));
+            }
+            Ok(s as usize)
+        };
+        let param_json = |p: &soundesti_plugin_api::ParamInfo, value: f32| {
+            let labels = match p.kind {
+                soundesti_plugin_api::ParamKind::Stepped { labels } => labels.to_vec(),
+                _ => Vec::new(),
+            };
+            json!({"key": p.key, "name": p.name, "min": p.min, "max": p.max, "default": p.default, "unit": p.unit, "value": value, "labels": labels})
+        };
+        match s(a, "action").ok_or("missing `action`")? {
+            "catalog" => text(json!(
+                soundesti_effects::CATALOG
+                    .iter()
+                    .map(|e| json!({
+                        "effect": e.type_id, "name": e.name, "category": e.category, "description": e.description,
+                        "params": e.params.iter().map(|p| param_json(p, p.default)).collect::<Vec<_>>(),
+                    }))
+                    .collect::<Vec<_>>()
+            )),
+            "list" => {
+                let t = self.mcp_track(a)?;
+                let chain: Vec<Value> = self.project.mixer[t].effects.iter().map(|e| json!({
+                    "slot": e.slot, "effect": e.type_id, "bypass": e.bypass,
+                    "params": soundesti_effects::params_for(&e.type_id).iter().map(|p| param_json(p, e.params.get(p.key).copied().unwrap_or(p.default))).collect::<Vec<_>>(),
+                })).collect();
+                text(json!({"track": t, "effects": chain}))
+            }
+            "add" => {
+                let (t, slot) = (self.mcp_track(a)?, slot_arg(a)?);
+                let ty = s(a, "effect").ok_or("add needs `effect` (see action=catalog)")?;
+                if soundesti_effects::info(ty).is_none() {
+                    return Err(format!("unknown effect `{ty}` (see action=catalog)"));
+                }
+                self.set_effect(t, slot, ty);
+                text(json!({"ok": true}))
+            }
+            "remove" => {
+                let (t, slot) = (self.mcp_track(a)?, slot_arg(a)?);
+                self.checkpoint("Remove effect (AI)");
+                self.project.mixer[t].remove_effect(slot);
+                self.win.effects.remove(&(t, slot));
+                text(json!({"ok": true}))
+            }
+            "set_param" => {
+                let (t, slot) = (self.mcp_track(a)?, slot_arg(a)?);
+                let key = s(a, "param").ok_or("missing `param`")?;
+                let value = f(a, "value").ok_or("missing `value`")? as f32;
+                let ty = self.project.mixer[t].effect(slot).ok_or("that slot is empty")?.type_id.clone();
+                let info = soundesti_effects::params_for(&ty)
+                    .iter()
+                    .find(|p| p.key == key)
+                    .ok_or_else(|| format!("no parameter `{key}` on {ty}"))?;
+                let v = value.clamp(info.min, info.max);
+                self.checkpoint("Effect parameter (AI)");
+                self.project.mixer[t].effect_mut(slot).unwrap().params.insert(key.to_string(), v);
+                text(json!({"ok": true, "value": v}))
+            }
+            "bypass" => {
+                let (t, slot) = (self.mcp_track(a)?, slot_arg(a)?);
+                let by = b(a, "bypass").ok_or("missing `bypass`")?;
+                self.checkpoint("Bypass effect (AI)");
+                self.project.mixer[t].effect_mut(slot).ok_or("that slot is empty")?.bypass = by;
+                text(json!({"ok": true}))
+            }
+            "move" => {
+                let (t, slot) = (self.mcp_track(a)?, slot_arg(a)?);
+                let to = i(a, "to")
+                    .filter(|x| (0..soundesti_project::FX_SLOTS as i64).contains(x))
+                    .ok_or("`to` must be a slot 0-9")? as usize;
+                self.checkpoint("Move effect (AI)");
+                self.project.mixer[t].move_effect(slot, to);
+                text(json!({"ok": true}))
+            }
+            other => Err(format!("unknown action `{other}`")),
+        }
+    }
+
+    fn mcp_playlist(&mut self, a: &Value) -> ToolResult {
+        let ts = self.project.time_signature;
+        match s(a, "action").ok_or("missing `action`")? {
+            "list" => text(json!({
+                "song_mode": self.project.song_mode,
+                "song_length_ticks": self.project.playlist.song_length(self.project.time_signature),
+                "clips": self.project.playlist.clips.iter().map(|c| json!({
+                    "pattern": c.pattern.0, "track": c.track, "start": c.start, "length": c.length, "offset": c.offset, "muted": c.muted,
+                })).collect::<Vec<_>>(),
+            })),
+            "add_clip" => {
+                let pid = soundesti_project::PatternId(i(a, "pattern").ok_or("missing `pattern`")? as u32);
+                let pat_len = self.project.pattern(pid).ok_or("no such pattern")?.length_ticks(ts);
+                let track = i(a, "track").unwrap_or(0).clamp(0, 498) as u16;
+                let start = i(a, "start").ok_or("missing `start` (ticks)")?;
+                let length = i(a, "length").unwrap_or(pat_len);
+                if start < 0 || length <= 0 {
+                    return Err("start must be >= 0 and length > 0".into());
+                }
+                self.checkpoint("Add clip (AI)");
+                self.project.playlist.ensure_track(track as usize);
+                self.project.playlist.clips.push(soundesti_project::Clip {
+                    pattern: pid,
+                    track,
+                    start,
+                    length,
+                    offset: 0,
+                    muted: false,
+                    selected: false,
+                });
+                text(json!({"ok": true}))
+            }
+            "remove_clips" => {
+                let before = self.project.playlist.clips.len();
+                let mut next = self.project.clone();
+                if let Some(pid) = i(a, "pattern") {
+                    next.playlist.clips.retain(|c| c.pattern.0 as i64 != pid);
+                } else {
+                    let track = i(a, "track").ok_or("pass `pattern`, or `track` + `start` + `length`")?;
+                    let (start, length) = (i(a, "start").unwrap_or(0), i(a, "length").unwrap_or(i64::MAX / 4));
+                    next.playlist
+                        .clips
+                        .retain(|c| !(c.track as i64 == track && c.start < start + length && c.end() > start));
+                }
+                let removed = before - next.playlist.clips.len();
+                if removed > 0 {
+                    self.checkpoint("Remove clips (AI)");
+                    self.project = next;
+                }
+                text(json!({"ok": true, "removed": removed}))
+            }
+            "song_mode" => {
+                let on = b(a, "enabled").ok_or("missing `enabled`")?;
+                self.project.song_mode = on;
+                text(json!({"ok": true, "song_mode": on}))
+            }
+            other => Err(format!("unknown action `{other}`")),
+        }
+    }
+
+    fn mcp_browser(&mut self, a: &Value) -> ToolResult {
+        match s(a, "action").ok_or("missing `action`")? {
+            "list" => {
+                let root = match s(a, "path") {
+                    Some(p) => PathBuf::from(p),
+                    None => crate::browser::packs_dir().ok_or("bundled packs folder not found")?,
+                };
+                let mut files = Vec::new();
+                collect_wavs(&root, 0, &mut files);
+                text(json!({"root": root, "files": files}))
+            }
+            "preview" => {
+                let p = PathBuf::from(s(a, "path").ok_or("missing `path`")?);
+                if !self.session.preview_sample(&p.display().to_string()) {
+                    return Err(self.session.sample_error.take().unwrap_or_else(|| "could not load".into()));
+                }
+                text(json!({"ok": true}))
+            }
+            "load" => {
+                let p = PathBuf::from(s(a, "path").ok_or("missing `path`")?);
+                soundesti_session::samples::load_wav(&p)?;
+                match a.get("channel") {
+                    Some(c) => {
+                        let id = self.resolve_channel(Some(c))?;
+                        self.set_channel_sample(id, &p);
+                        text(json!({"ok": true, "channel": id.0}))
+                    }
+                    None => {
+                        self.add_sample_channel(&p);
+                        text(json!({"ok": true, "channel": self.selected_channel.map(|c| c.0)}))
+                    }
+                }
+            }
+            other => Err(format!("unknown action `{other}`")),
+        }
+    }
+
     fn state_json(&self) -> Value {
         let ts = self.project.time_signature;
         let pos = self.shared.position_tick();
@@ -566,8 +775,10 @@ impl App {
                 "playing": self.shared.playing.load(std::sync::atomic::Ordering::Relaxed),
                 "position_ticks": pos,
                 "position_bst": BarStepTick::from_tick(pos.max(0.0) as Tick, ts).to_string(),
-                "mode": "pattern",
+                "mode": if self.project.song_mode { "song" } else { "pattern" },
             },
+            "playlist_clips": self.project.playlist.clips.len(),
+            "song_length_ticks": self.project.playlist.song_length(self.project.time_signature),
             "tempo_bpm": self.project.bpm,
             "time_signature": format!("{}/{}", ts.numerator, ts.denominator),
             "metronome": self.project.metronome,
@@ -583,8 +794,9 @@ impl App {
                 "mixer_track": c.mixer_track, "notes_in_pattern": cur.notes(c.id).len(),
             })).collect::<Vec<_>>(),
             "mixer": self.project.mixer.iter().enumerate()
-                .filter(|(i, t)| *i == 0 || self.project.channels.iter().any(|c| c.mixer_track as usize == *i) || t.muted || t.volume != 0.8 || t.pan != 0.0)
-                .map(|(i, t)| json!({"track": i, "name": t.name, "volume": t.volume, "pan": t.pan, "muted": t.muted}))
+                .filter(|(i, t)| *i == 0 || self.project.channels.iter().any(|c| c.mixer_track as usize == *i) || t.muted || t.volume != 0.8 || t.pan != 0.0 || !t.effects.is_empty())
+                .map(|(i, t)| json!({"track": i, "name": t.name, "volume": t.volume, "pan": t.pan, "muted": t.muted,
+                    "effects": t.effects.iter().map(|e| json!({"slot": e.slot, "effect": e.type_id, "bypass": e.bypass})).collect::<Vec<_>>()}))
                 .collect::<Vec<_>>(),
             "mixer_solo": self.mixer_solo,
             "windows": {
@@ -654,5 +866,22 @@ impl App {
                 .map_err(|e| e.to_string());
             let _ = reply.send(res);
         });
+    }
+}
+
+/// WAV files under `dir` (depth-limited), as absolute path strings.
+fn collect_wavs(dir: &std::path::Path, depth: usize, out: &mut Vec<String>) {
+    if depth > 6 || out.len() >= 2000 {
+        return;
+    }
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let mut entries: Vec<_> = rd.flatten().map(|e| e.path()).collect();
+    entries.sort();
+    for p in entries {
+        if p.is_dir() {
+            collect_wavs(&p, depth + 1, out);
+        } else if soundesti_session::samples::is_supported(&p) {
+            out.push(p.display().to_string());
+        }
     }
 }

@@ -1,0 +1,10 @@
+[package]
+name = "soundesti-effects"
+description = "Soundesti native insert effects: EQ, dynamics, delay, reverb, distortion, modulation, filter."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+soundesti-dsp.workspace = true
+soundesti-plugin-api.workspace = true

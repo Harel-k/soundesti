@@ -4,7 +4,10 @@
 //! against what the engine was last told and sends only the needed commands, so the
 //! UI can call it after any edit (or every frame) without flooding the audio thread.
 
+pub mod samples;
+
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use soundesti_audio::{Command, Engine, EngineConfig, EngineHandle, PlaybackNote, PlaybackSnapshot};
 use soundesti_plugin_api::Instrument;
@@ -26,11 +29,36 @@ fn apply_params(inst: &mut dyn Instrument, state: &InstrumentState) {
     }
 }
 
-/// Converts the project's current pattern into what the engine plays.
-/// `slots` maps channel IDs to engine slots.
+/// Converts the project into what the engine plays: the whole Playlist in song mode,
+/// otherwise the current pattern on loop. `slots` maps channel IDs to engine slots.
 pub fn build_snapshot(project: &Project, slots: &HashMap<ChannelId, usize>) -> PlaybackSnapshot {
-    let pattern = project.current();
     let ts = project.time_signature;
+    if project.song_mode {
+        let mut notes = Vec::new();
+        for clip in project.playlist.audible_clips() {
+            let Some(pattern) = project.pattern(clip.pattern) else { continue };
+            for pc in &pattern.channels {
+                let Some(&slot) = slots.get(&pc.channel) else { continue };
+                for n in pc.notes.iter().filter(|n| !n.muted) {
+                    // Position inside the clip window [offset, offset + length).
+                    let rel = n.start - clip.offset;
+                    if rel < 0 || rel >= clip.length {
+                        continue;
+                    }
+                    let start = clip.start + rel;
+                    notes.push(PlaybackNote {
+                        channel: slot as u16,
+                        start,
+                        end: (start + n.length).min(clip.end()),
+                        key: n.key,
+                        velocity: n.velocity,
+                    });
+                }
+            }
+        }
+        return PlaybackSnapshot::new(TempoMap::constant(project.bpm), ts, 0, project.playlist.song_length(ts), notes);
+    }
+    let pattern = project.current();
     let mut notes = Vec::new();
     for pc in &pattern.channels {
         let Some(&slot) = slots.get(&pc.channel) else { continue };
@@ -68,18 +96,31 @@ pub struct Session {
     max_channels: usize,
     channels: HashMap<ChannelId, ChannelMirror>,
     tracks: Vec<Option<TrackMirror>>,
+    /// Last effect chain sent per mixer track.
+    fx: Vec<Vec<soundesti_project::EffectSlot>>,
     snapshot_key: Option<SnapshotKey>,
     metronome: Option<bool>,
     /// Soloed channels (UI state, FL does not save channel solo).
     pub solo: Vec<ChannelId>,
     /// Soloed mixer insert: every other insert is muted (the master never is).
     pub mixer_solo: Option<usize>,
+    /// Decoded samples by path (shared by channels using the same file).
+    sample_cache: HashMap<String, Arc<soundesti_plugin_api::SampleData>>,
+    /// Last sample that failed to load, for the UI to report.
+    pub sample_error: Option<String>,
+    /// The Browser's preview voice lives in the last engine slot (never used by channels).
+    preview_ready: bool,
 }
+
+/// MIDI key the preview sampler plays (its root key, so samples play at their own pitch).
+const PREVIEW_KEY: u8 = 60;
 
 /// Everything the playback snapshot depends on, to skip rebuilding it when unchanged.
 #[derive(Clone, PartialEq)]
 struct SnapshotKey {
-    pattern: soundesti_project::Pattern,
+    /// Current pattern in pattern mode; every pattern plus the playlist in song mode.
+    patterns: Vec<soundesti_project::Pattern>,
+    playlist: Option<soundesti_project::Playlist>,
     bpm: f64,
     ts: soundesti_timeline::TimeSignature,
     slots: Vec<(ChannelId, usize)>,
@@ -93,10 +134,45 @@ impl Session {
             max_channels: config.max_channels,
             channels: HashMap::new(),
             tracks: Vec::new(),
+            fx: Vec::new(),
             snapshot_key: None,
             metronome: None,
             solo: Vec::new(),
             mixer_solo: None,
+            sample_cache: HashMap::new(),
+            sample_error: None,
+            preview_ready: false,
+        }
+    }
+
+    fn preview_slot(&self) -> usize {
+        self.max_channels - 1
+    }
+
+    /// Plays a sample once through the master (the Browser's click-to-preview).
+    pub fn preview_sample(&mut self, path: &str) -> bool {
+        let Some(sample) = self.load_sample(path) else { return false };
+        let slot = self.preview_slot();
+        if !self.preview_ready {
+            let Some(inst) =
+                soundesti_synthesis::create_instrument(soundesti_synthesis::sampler::TYPE_ID, self.sample_rate)
+            else {
+                return false;
+            };
+            self.handle.send(Command::AddChannel { slot, instrument: inst });
+            self.handle.send(Command::SetChannel { slot, volume: 0.78, pan: 0.0, muted: false, track: 0 });
+            self.preview_ready = true;
+        }
+        // Replacing the sample also stops the previous preview.
+        self.handle.send(Command::SetSample { slot, sample: Some(sample) });
+        self.handle.send(Command::NoteOn { slot, key: PREVIEW_KEY, velocity: 0.8 });
+        true
+    }
+
+    pub fn stop_preview(&mut self) {
+        if self.preview_ready {
+            let slot = self.preview_slot();
+            self.handle.send(Command::SetSample { slot, sample: None });
         }
     }
 
@@ -121,7 +197,7 @@ impl Session {
     }
 
     fn free_slot(&self) -> Option<usize> {
-        (0..self.max_channels).find(|s| !self.channels.values().any(|c| c.slot == *s))
+        (0..self.max_channels - 1).find(|s| !self.channels.values().any(|c| c.slot == *s))
     }
 
     /// Brings the engine in line with `project`. Cheap when nothing changed.
@@ -156,6 +232,12 @@ impl Session {
                 self.tracks[i] = Some(m);
             }
         }
+        self.fx.resize(project.mixer.len(), Vec::new());
+        for (i, t) in project.mixer.iter().enumerate() {
+            if self.fx[i] != t.effects {
+                self.sync_effects(i, &t.effects);
+            }
+        }
 
         if self.metronome != Some(project.metronome) {
             self.handle.send(Command::SetMetronome(project.metronome));
@@ -165,14 +247,62 @@ impl Session {
         // Playback snapshot.
         let mut slots: Vec<(ChannelId, usize)> = self.channels.iter().map(|(id, m)| (*id, m.slot)).collect();
         slots.sort();
-        let key =
-            SnapshotKey { pattern: project.current().clone(), bpm: project.bpm, ts: project.time_signature, slots };
+        let key = SnapshotKey {
+            patterns: if project.song_mode { project.patterns.clone() } else { vec![project.current().clone()] },
+            playlist: project.song_mode.then(|| project.playlist.clone()),
+            bpm: project.bpm,
+            ts: project.time_signature,
+            slots,
+        };
         if self.snapshot_key.as_ref() != Some(&key) {
             let map: HashMap<ChannelId, usize> = key.slots.iter().copied().collect();
             let snap = build_snapshot(project, &map);
             self.handle.send(Command::ReplaceSnapshot(Box::new(snap)));
             self.snapshot_key = Some(key);
         }
+    }
+
+    /// Sends the difference between the last-sent chain of `track` and `effects`.
+    fn sync_effects(&mut self, track: usize, effects: &[soundesti_project::EffectSlot]) {
+        let old = std::mem::take(&mut self.fx[track]);
+        for slot in 0..soundesti_project::FX_SLOTS {
+            let before = old.iter().find(|e| e.slot as usize == slot);
+            let after = effects.iter().find(|e| e.slot as usize == slot);
+            match (before, after) {
+                (None, None) => {}
+                (Some(_), None) => {
+                    self.handle.send(Command::SetEffect { track, slot, effect: None });
+                }
+                (b, Some(a)) => {
+                    let infos = soundesti_effects::params_for(&a.type_id);
+                    if b.is_none_or(|b| b.type_id != a.type_id) {
+                        let effect = soundesti_effects::create(&a.type_id, self.sample_rate).map(|mut fx| {
+                            for p in infos {
+                                if let Some(&v) = a.params.get(p.key) {
+                                    fx.set_param(p.id, v);
+                                }
+                            }
+                            fx
+                        });
+                        self.handle.send(Command::SetEffect { track, slot, effect });
+                        self.handle.send(Command::SetEffectBypass { track, slot, bypass: a.bypass });
+                        continue;
+                    }
+                    let b = b.expect("checked above");
+                    for p in infos {
+                        let (old_v, new_v) = (b.params.get(p.key), a.params.get(p.key));
+                        if old_v != new_v {
+                            let value = new_v.copied().unwrap_or(p.default);
+                            self.handle.send(Command::SetEffectParam { track, slot, id: p.id, value });
+                        }
+                    }
+                    if b.bypass != a.bypass {
+                        self.handle.send(Command::SetEffectBypass { track, slot, bypass: a.bypass });
+                    }
+                }
+            }
+        }
+        self.fx[track] = effects.to_vec();
     }
 
     fn sync_channel(&mut self, ch: &Channel, muted: bool) {
@@ -205,6 +335,14 @@ impl Session {
                 }
             }
         }
+        let sample_changed =
+            needs_new_instrument || existing.as_ref().is_some_and(|m| m.instrument.sample != ch.instrument.sample);
+        if sample_changed {
+            let data = ch.instrument.sample.as_deref().and_then(|p| self.load_sample(p));
+            if data.is_some() || !needs_new_instrument {
+                self.handle.send(Command::SetSample { slot, sample: data });
+            }
+        }
         let mirror = ChannelMirror {
             slot,
             instrument: ch.instrument.clone(),
@@ -227,6 +365,23 @@ impl Session {
         }
         self.channels.insert(ch.id, mirror);
     }
+
+    /// Decodes (or reuses) a sample file; records a readable error on failure.
+    pub fn load_sample(&mut self, path: &str) -> Option<Arc<soundesti_plugin_api::SampleData>> {
+        if let Some(s) = self.sample_cache.get(path) {
+            return Some(s.clone());
+        }
+        match samples::load_wav(std::path::Path::new(path)) {
+            Ok(s) => {
+                self.sample_cache.insert(path.to_string(), s.clone());
+                Some(s)
+            }
+            Err(e) => {
+                self.sample_error = Some(e);
+                None
+            }
+        }
+    }
 }
 
 /// Looks up a parameter's numeric ID from its persistent key.
@@ -236,10 +391,7 @@ pub fn param_id(type_id: &str, key: &str) -> Option<u32> {
 
 /// Static parameter list for an instrument type (for building editor UIs).
 pub fn instrument_params(type_id: &str) -> &'static [soundesti_plugin_api::ParamInfo] {
-    match type_id {
-        soundesti_synthesis::trident::TYPE_ID => &soundesti_synthesis::trident::PARAMS,
-        _ => &[],
-    }
+    soundesti_synthesis::params_for(type_id)
 }
 
 #[cfg(test)]
@@ -266,6 +418,77 @@ mod tests {
         session.send(Command::Play);
         let left = render(&mut engine, 9_600);
         assert!(left.iter().any(|x| x.abs() > 1e-3), "step did not sound");
+    }
+
+    #[test]
+    fn song_mode_plays_playlist_clips() {
+        // 120 BPM: one 4/4 bar = 2 s = 96 000 samples.
+        let mut p = Project::new();
+        p.bpm = 120.0;
+        let ch = p.channels[0].id;
+        p.current_mut().toggle_step(ch, 0);
+        let pid = p.current_pattern;
+        p.song_mode = true;
+        for bar in [0, 2] {
+            p.playlist.clips.push(soundesti_project::Clip {
+                pattern: pid,
+                track: 0,
+                start: bar * 3840,
+                length: 3840,
+                offset: 0,
+                muted: false,
+                selected: false,
+            });
+        }
+        let (mut engine, mut session) = Session::with_engine(&p, CFG);
+        session.send(Command::Play);
+        let left = render(&mut engine, 96_000 * 3);
+        let loud = |r: std::ops::Range<usize>| left[r].iter().any(|x| x.abs() > 1e-3);
+        assert!(loud(0..9_600), "clip at bar 1 must play");
+        assert!(!loud(96_000 + 48_000..96_000 * 2), "bar 2 has no clip");
+        assert!(loud(96_000 * 2..96_000 * 2 + 9_600), "clip at bar 3 must play");
+    }
+
+    #[test]
+    fn browser_preview_plays_a_pack_sample() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/packs/Soundesti Essentials/Kicks/SE Kick Punch.wav");
+        let p = Project::empty();
+        let (mut engine, mut session) = Session::with_engine(&p, CFG);
+        assert!(render(&mut engine, 2_048).iter().all(|x| *x == 0.0), "empty project is silent");
+        assert!(session.preview_sample(&path.display().to_string()), "pack sample loads");
+        let out = render(&mut engine, 9_600);
+        assert!(out.iter().any(|x| x.abs() > 0.05), "preview is audible without pressing play");
+        session.stop_preview();
+        render(&mut engine, 1_024);
+        assert!(render(&mut engine, 2_048).iter().all(|x| x.abs() < 1e-6), "stop silences the preview");
+        assert!(!session.preview_sample("missing.wav"));
+    }
+
+    #[test]
+    fn mixer_effects_follow_the_project() {
+        let peak = |v: &[f32]| v.iter().fold(0.0f32, |m, x| m.max(x.abs()));
+        let mut p = Project::new();
+        let ch = p.channels[0].id;
+        p.current_mut().notes_mut(ch).push(Note::new(0, 3840 * 4, 60));
+        let (mut engine, mut session) = Session::with_engine(&p, CFG);
+        session.send(Command::Play);
+        let dry = peak(&render(&mut engine, 4_800));
+        assert!(dry > 1e-3);
+        // Utility at -24 dB on the master.
+        p.mixer[0].set_effect(2, soundesti_effects::utility::TYPE_ID);
+        p.mixer[0].effect_mut(2).unwrap().params.insert("util.gain".into(), -24.0);
+        session.sync(&p);
+        let quiet = peak(&render(&mut engine, 4_800)[1_000..]);
+        assert!(quiet < dry * 0.2, "-24 dB utility: {quiet} vs {dry}");
+        p.mixer[0].effect_mut(2).unwrap().bypass = true;
+        session.sync(&p);
+        let back = peak(&render(&mut engine, 4_800)[1_000..]);
+        assert!(back > quiet * 3.0, "bypass restores level");
+        p.mixer[0].remove_effect(2);
+        session.sync(&p);
+        render(&mut engine, 512);
+        assert!(session.handle().collect_garbage() >= 1, "removed effect is freed");
     }
 
     #[test]

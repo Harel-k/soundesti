@@ -29,10 +29,10 @@ installer repair/upgrade file cleanup, update tamper rejection.
 ### P0 — core workflow an FL user hits in the first minutes
 | Gap | FL behaviour | Status |
 |---|---|---|
-| Playlist + song mode | Arrange pattern/audio/automation clips on tracks; L switches PAT/SONG (verified: shortcut page) | Placeholder window; song mode refuses honestly |
-| Default project content | New project opens with a small drum kit of sample channels (*to verify exact template*) | One Trident synth channel |
-| Sampler channels + Browser | Drag samples from the Browser into the Channel Rack / Playlist (verified: Browser shortcuts exist) | No sampler, no browser |
-| Mixer routing & effects | 10 effect slots per insert, routing to any insert, sends, sidechain | Inserts → master only, no effects |
+| Playlist + song mode | Arrange pattern/audio/automation clips on tracks; L switches PAT/SONG (verified: shortcut page) | **Done** for pattern clips (tools, move/resize/slice, song mode); audio/automation clips missing |
+| Default project content | New project opens with a small drum kit of sample channels (*to verify exact template*) | **Done**: Kick/Clap/Hat/Snare with a starter beat |
+| Sampler channels + Browser | Drag samples from the Browser into the Channel Rack / Playlist (verified: Browser shortcuts exist) | **Done**: Sampler + Browser (preview, double-click, Enter, drag to rack) + bundled original pack; Playlist audio drops missing |
+| Mixer routing & effects | 10 effect slots per insert, routing to any insert, sends, sidechain | **Effects done** (10 slots, 9 effects, bypass, reorder); routing/sends/sidechain missing |
 | Automation clips | Automate any parameter from the Playlist | Missing |
 | Audio recording | R toggles recording (verified) | Missing |
 | Plugin hosting | VST3/CLAP (verified: compare page) | Missing |
@@ -68,9 +68,9 @@ and Ctrl+1–0 solo, Ctrl+L route to free mixer tracks, steps-are-notes with the
 preview, FL note naming (MIDI 60 = C5), 130 BPM default, 125 inserts + master.
 
 ## Recommended order to reach practical 1:1
-1. Playlist + song mode + pattern clips (P0, unlocks arranging)
-2. Sampler channel + Browser + default drum kit (original CC0 samples)
-3. Mixer effect slots + routing + first effects (EQ, compressor, delay, reverb)
+1. ~~Playlist + song mode + pattern clips~~ (done)
+2. ~~Sampler channel + Browser + default drum kit~~ (done)
+3. ~~Mixer effect slots + first effects~~ (done); routing and sends next
 4. Automation clips
 5. Piano roll tool suite + event lanes
 6. Recording, MIDI devices/import/export

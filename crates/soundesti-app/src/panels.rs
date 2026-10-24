@@ -2,20 +2,32 @@
 
 use egui::{Align2, Id, RichText, Ui, vec2};
 use soundesti_export::{BitDepth, ExportOptions};
-use soundesti_plugin_api::ParamKind;
 use soundesti_project::ChannelId;
 use soundesti_shortcuts::Context;
 
 use crate::app::{App, Dialog};
-use crate::{theme, widgets};
+use crate::theme;
 
 impl App {
     pub fn windows(&mut self, ctx: &egui::Context) {
+        // Created first so it starts behind the other windows (FL's layout).
+        let mut open = self.win.playlist;
+        let r = egui::Window::new("Playlist - Arrangement")
+            .id(Id::unique("w_playlist"))
+            .open(&mut open)
+            .default_pos([8.0, 84.0])
+            .default_size([1560.0, 760.0])
+            .scroll(false)
+            .resizable(true)
+            .show(ctx, |ui| self.playlist_ui(ui));
+        self.win.playlist = open;
+        self.register_window(&r, Context::Playlist);
+
         let mut open = self.win.channel_rack;
         let r = egui::Window::new("Channel rack")
             .id(Id::unique("w_rack"))
             .open(&mut open)
-            .default_pos([16.0, 96.0])
+            .default_pos([260.0, 170.0])
             .default_size([720.0, 220.0])
             .show(ctx, |ui| self.channel_rack_ui(ui));
         self.win.channel_rack = open;
@@ -47,25 +59,13 @@ impl App {
         self.win.mixer = open;
         self.register_window(&r, Context::Mixer);
 
-        let mut open = self.win.playlist;
-        let r = egui::Window::new("Playlist - Arrangement").id(Id::unique("w_playlist")).open(&mut open).default_size([700.0, 300.0]).show(ctx, |ui| {
-            not_yet(ui, "The Playlist (song arrangement) is Phase 3.", "Today you can build and loop patterns in the Channel Rack and Piano roll, mix them, save, and export WAV.");
-        });
-        self.win.playlist = open;
-        self.register_window(&r, Context::Playlist);
-
         let mut open = self.win.browser;
         let r = egui::Window::new("Browser")
             .id(Id::unique("w_browser"))
             .open(&mut open)
-            .default_pos([16.0, 400.0])
-            .show(ctx, |ui| {
-                not_yet(
-                    ui,
-                    "The sample/preset Browser is not implemented yet.",
-                    "Native instruments are available from the Channel Rack ï¼‹ button or the Plugin picker (F8).",
-                );
-            });
+            .default_pos([8.0, 84.0])
+            .default_size([260.0, 620.0])
+            .show(ctx, |ui| self.browser_ui(ui));
         self.win.browser = open;
         self.register_window(&r, Context::Browser);
 
@@ -134,7 +134,7 @@ impl App {
         if let Some(job) = &self.export_job {
             let frac = job.fraction();
             let mut cancel = false;
-            egui::Window::new("Renderingâ€¦")
+            egui::Window::new("Rendering…")
                 .id(Id::unique("w_render"))
                 .collapsible(false)
                 .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
@@ -150,9 +150,13 @@ impl App {
 
         let ids: Vec<ChannelId> = self.win.instruments.iter().copied().collect();
         for id in ids {
-            let Some(name) = self.project.channel(id).map(|c| c.name.clone()) else { continue };
+            let Some((name, ty)) = self.project.channel(id).map(|c| (c.name.clone(), c.instrument.type_id.clone()))
+            else {
+                continue;
+            };
+            let inst_name = soundesti_synthesis::info(&ty).map(|i| i.name).unwrap_or("Unknown instrument");
             let mut open = true;
-            egui::Window::new(format!("{name} (Trident)"))
+            egui::Window::new(format!("{name} ({inst_name})"))
                 .id(Id::unique(("w_inst", id.0)))
                 .open(&mut open)
                 .default_pos([420.0, 140.0])
@@ -162,20 +166,46 @@ impl App {
                 self.win.instruments.remove(&id);
             }
         }
+
+        let fx: Vec<(usize, usize)> = self.win.effects.iter().copied().collect();
+        for (track, slot) in fx {
+            let Some(type_id) = self.project.mixer.get(track).and_then(|t| t.effect(slot)).map(|e| e.type_id.clone())
+            else {
+                self.win.effects.remove(&(track, slot));
+                continue;
+            };
+            let name = soundesti_effects::info(&type_id).map(|i| i.name).unwrap_or("Unknown effect");
+            let mut open = true;
+            egui::Window::new(format!("{name} - {} slot {}", self.project.mixer[track].name, slot + 1))
+                .id(Id::unique(("w_fx", track, slot)))
+                .open(&mut open)
+                .default_pos([520.0, 200.0])
+                .resizable(false)
+                .show(ctx, |ui| self.effect_ui(ui, track, slot));
+            if !open {
+                self.win.effects.remove(&(track, slot));
+            }
+        }
     }
 
     fn plugin_picker_ui(&mut self, ui: &mut Ui) {
         ui.label(RichText::new("Instruments").strong());
-        for (type_id, name) in soundesti_synthesis::INSTRUMENT_TYPES {
+        let mut last_cat = "";
+        for info in soundesti_synthesis::CATALOG {
+            if info.category != last_cat {
+                last_cat = info.category;
+                ui.add_space(4.0);
+                ui.label(RichText::new(info.category).color(theme::ACCENT).small());
+            }
             ui.horizontal(|ui| {
-                if ui.button(format!("ðŸŽ¹ {name}")).clicked() {
-                    self.add_channel(type_id, name);
+                if crate::icons::text_button(ui, crate::icons::Icon::Piano, info.name, false).clicked() {
+                    self.add_channel(info.type_id, info.name);
                 }
-                ui.label(RichText::new("3-oscillator subtractive synth").color(theme::TEXT_DIM).small());
+                ui.label(RichText::new(info.description).color(theme::TEXT_DIM).small());
             });
         }
         ui.separator();
-        ui.label(RichText::new("Effects: none yet (Phase 4). CLAP/VST3 hosting: Phase 6.").color(theme::TEXT_DIM));
+        ui.label(RichText::new("Effects are added in the Mixer (select a track, then an empty slot). CLAP/VST3 plugin hosting is not available yet.").color(theme::TEXT_DIM));
     }
 
     fn song_info_ui(&mut self, ui: &mut Ui) {
@@ -206,7 +236,7 @@ impl App {
     fn audio_settings_ui(&mut self, ui: &mut Ui) {
         let info = self.output.info.clone();
         ui.label(format!(
-            "Running: {} Â· {} ({} Hz, {} ch, {})",
+            "Running: {} · {} ({} Hz, {} ch, {})",
             info.host, info.device, info.sample_rate, info.channels, info.sample_format
         ));
         if let Some(l) = info.buffer_latency_ms() {
@@ -216,7 +246,7 @@ impl App {
         }
         let s = &self.shared;
         ui.label(format!(
-            "Callbacks: {} Â· overloaded: {} Â· dropped commands: {}",
+            "Callbacks: {} · overloaded: {} · dropped commands: {}",
             s.callbacks.load(std::sync::atomic::Ordering::Relaxed),
             s.overloads.load(std::sync::atomic::Ordering::Relaxed),
             s.dropped_commands.load(std::sync::atomic::Ordering::Relaxed)
@@ -288,14 +318,14 @@ impl App {
 
     fn help_ui(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            ui.label("ðŸ”");
+            crate::icons::inline(ui, crate::icons::Icon::Zoom, theme::TEXT_DIM);
             ui.add(
                 egui::TextEdit::singleline(&mut self.help_query)
                     .hint_text("Search commands or keys, e.g. \"quantize\" or \"ctrl+b\"")
                     .desired_width(360.0),
             );
         });
-        ui.label(RichText::new(format!("Profile: {} â€” transcribed from the official FL Studio manual. See docs/SHORTCUT_MATRIX.md for implementation status.", self.keymap.name)).color(theme::TEXT_DIM).small());
+        ui.label(RichText::new(format!("Profile: {} — transcribed from the official FL Studio manual. See docs/SHORTCUT_MATRIX.md for implementation status.", self.keymap.name)).color(theme::TEXT_DIM).small());
         ui.separator();
         let results: Vec<_> = self.keymap.search(&self.help_query).into_iter().cloned().collect();
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -346,7 +376,7 @@ impl App {
                 .color(theme::TEXT_DIM)
                 .small(),
         );
-        if ui.button("Renderâ€¦").clicked() {
+        if ui.button("Render…").clicked() {
             let opts: ExportOptions = self.export_opts;
             self.begin_export(opts);
         }
@@ -354,97 +384,38 @@ impl App {
 
     fn instrument_ui(&mut self, ui: &mut Ui, id: ChannelId) {
         let Some(ch) = self.project.channel(id).cloned() else { return };
-        let params = soundesti_session::instrument_params(&ch.instrument.type_id);
-        let color = theme::rgb(ch.color);
-        let mut groups: Vec<&str> = Vec::new();
-        for p in params {
-            if !groups.contains(&p.group) {
-                groups.push(p.group);
-            }
-        }
-        ui.horizontal_wrapped(|ui| {
-            for g in groups {
-                egui::Frame::new().fill(theme::PANEL_DARK).corner_radius(4).inner_margin(6).show(ui, |ui| {
-                    ui.vertical(|ui| {
-                        ui.label(RichText::new(g).strong().color(color));
-                        ui.horizontal(|ui| {
-                            for p in params.iter().filter(|p| p.group == g) {
-                                let cur = ch.instrument.params.get(p.key).copied().unwrap_or(p.default);
-                                let mut v = cur;
-                                let (started, changed) = ui
-                                    .vertical(|ui| {
-                                        ui.label(RichText::new(p.name).small());
-                                        match p.kind {
-                                            ParamKind::Stepped { labels } if !labels.is_empty() => {
-                                                let mut idx = v.round() as usize;
-                                                let mut ch = false;
-                                                egui::ComboBox::from_id_salt((id.0, p.id))
-                                                    .width(70.0)
-                                                    .selected_text(labels[idx.min(labels.len() - 1)])
-                                                    .show_ui(ui, |ui| {
-                                                        for (i, l) in labels.iter().enumerate() {
-                                                            ch |= ui.selectable_value(&mut idx, i, *l).changed();
-                                                        }
-                                                    });
-                                                v = idx as f32;
-                                                (ch, ch)
-                                            }
-                                            ParamKind::Stepped { .. } => {
-                                                let r = ui.add(
-                                                    egui::DragValue::new(&mut v)
-                                                        .range(p.min..=p.max)
-                                                        .speed(0.1)
-                                                        .fixed_decimals(0)
-                                                        .suffix(p.unit),
-                                                );
-                                                (r.drag_started() || r.gained_focus(), r.changed())
-                                            }
-                                            ParamKind::Continuous => {
-                                                let log = p.unit == "Hz" && p.min > 0.0;
-                                                let mut norm =
-                                                    if log { (v / p.min).ln() / (p.max / p.min).ln() } else { v };
-                                                let (lo, hi, def) = if log {
-                                                    (0.0, 1.0, (p.default / p.min).ln() / (p.max / p.min).ln())
-                                                } else {
-                                                    (p.min, p.max, p.default)
-                                                };
-                                                let r = widgets::knob(
-                                                    ui,
-                                                    &mut norm,
-                                                    lo,
-                                                    hi,
-                                                    def,
-                                                    30.0,
-                                                    color,
-                                                    &format!("{} {}", p.name, fmt_value(v, p.unit)),
-                                                );
-                                                if r.changed {
-                                                    v = if log { p.min * (p.max / p.min).powf(norm) } else { norm };
-                                                }
-                                                ui.label(
-                                                    RichText::new(fmt_value(v, p.unit)).small().color(theme::TEXT_DIM),
-                                                );
-                                                (r.started, r.changed)
-                                            }
-                                        }
-                                    })
-                                    .inner;
-                                if started {
-                                    self.checkpoint("Instrument parameter");
-                                }
-                                if changed
-                                    && v != cur
-                                    && let Some(c) = self.project.channel_mut(id)
-                                {
-                                    c.instrument.params.insert(p.key.to_string(), v);
-                                    self.needs_sync = true;
-                                }
-                            }
+        if ch.instrument.type_id == soundesti_synthesis::sampler::TYPE_ID {
+            ui.horizontal(|ui| {
+                crate::icons::inline(ui, crate::icons::Icon::Wave, theme::rgb(ch.color));
+                match &ch.instrument.sample {
+                    Some(path) => {
+                        let info = self.session.load_sample(path).map(|s| {
+                            format!("{} — {:.2} s, {} Hz", s.name, s.duration_seconds(), s.sample_rate as u32)
                         });
-                    });
-                });
-            }
-        });
+                        ui.label(info.unwrap_or_else(|| format!("Missing file: {path}")));
+                    }
+                    None => {
+                        ui.label(RichText::new("No sample loaded").color(theme::WARN));
+                    }
+                }
+                let label = if ch.instrument.sample.is_some() { "Replace…" } else { "Load sample…" };
+                if crate::icons::text_button(ui, crate::icons::Icon::Folder, label, false).clicked() {
+                    self.choose_sample(id);
+                }
+            });
+            ui.separator();
+        }
+        let params = soundesti_session::instrument_params(&ch.instrument.type_id);
+        let edit = crate::params_ui::param_grid(ui, id.0, params, &ch.instrument.params, theme::rgb(ch.color));
+        if edit.started {
+            self.checkpoint("Instrument parameter");
+        }
+        if let Some((key, v)) = edit.changed
+            && let Some(c) = self.project.channel_mut(id)
+        {
+            c.instrument.params.insert(key.to_string(), v);
+            self.needs_sync = true;
+        }
         ui.horizontal(|ui| {
             ui.label(RichText::new("Preview:").small());
             for (label, key) in [("C4", 48u8), ("C5", 60), ("C6", 72)] {
@@ -568,7 +539,7 @@ fn rename_field(ui: &mut Ui, text: &mut String) -> Option<bool> {
 
 fn not_yet(ui: &mut Ui, what: &str, meanwhile: &str) {
     ui.add_space(8.0);
-    ui.label(RichText::new(format!("âš  {what}")).color(theme::WARN));
+    ui.label(RichText::new(format!("⚠ {what}")).color(theme::WARN));
     ui.label(RichText::new(meanwhile).color(theme::TEXT_DIM));
     ui.add_space(8.0);
     ui.allocate_space(vec2(ui.available_width(), 0.0));
@@ -590,17 +561,5 @@ fn bit_name(b: BitDepth) -> &'static str {
         BitDepth::Int16 => "16-bit (dithered)",
         BitDepth::Int24 => "24-bit",
         BitDepth::Float32 => "32-bit float",
-    }
-}
-
-fn fmt_value(v: f32, unit: &str) -> String {
-    match unit {
-        "Hz" if v >= 1000.0 => format!("{:.2} kHz", v / 1000.0),
-        "Hz" => format!("{v:.0} Hz"),
-        "s" if v < 1.0 => format!("{:.0} ms", v * 1000.0),
-        "s" => format!("{v:.2} s"),
-        "ct" => format!("{v:+.0} ct"),
-        "Q" => format!("Q {v:.2}"),
-        _ => format!("{:.0}%", v * 100.0),
     }
 }

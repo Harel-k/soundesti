@@ -1,10 +1,10 @@
 # Progress
 
-_Last updated: 2026-10-24 (session 1)._
+_Last updated: 2026-10-24 (session 2: instruments, playlist, effects, browser)._
 
 ## Current phase
-**Phase 1 (playable core) — done. Phase 2 (sequencer + piano roll + persistence) — mostly done.**
-Next: finish Phase 2 gaps, then Phase 3 (Playlist / song mode).
+**Phases 1-2 done; Phase 3 (Playlist / song mode) and Phase 4 basics (insert effects) implemented.**
+Next: automation clips, insert-to-insert routing and sends, piano-roll tool suite.
 
 ## Environment set up this session
 - Installed Rust 1.99.1 (rustup, MSVC), VS 2022 C++ tools 14.43 + Windows SDK 10.0.22621.
@@ -32,16 +32,22 @@ Next: finish Phase 2 gaps, then Phase 3 (Playlist / song mode).
 | App icon (music note in a crystal), embedded in both exes, window/taskbar, shortcuts | rendered and reviewed at 16–256 px |
 
 | Bug hunt + FL 1:1 gap audit (docs/AUDIT.md): 6 bugs fixed (installer data loss, update races, paint flood, MCP socket reset, B:S:T clock), TOOLS menu, toolbar master volume | tests + manual checks |
-| **Built-in MCP server** (docs/MCP.md): 23 tools, all 194 commands, screenshots, local-only, off by default | unit tests + live AI-style session 2026-10-24 |
+| **Built-in MCP server** (docs/MCP.md): 26 tools (incl. mixer effects, playlist, browser), all 194 commands, screenshots, local-only, off by default | unit tests + live AI-style session 2026-10-24 |
+| **Instruments**: Sampler (WAV, root/tune/ADSR/reverse/start), Kickr (kick), Clapper (clap/snare), Hatz (hi-hats), Orbit (2-op FM), Harpa (plucked string), Trident; grouped "+ Add" menu; new projects open with a Kick/Clap/Hat/Snare kit | 17 synthesis tests + sample loading tests |
+| **Playlist + song mode** (PAT/SONG, L): pattern clips on 50+ tracks, draw/paint/select/delete/mute/slice/zoom tools, move/resize/clone, copy/paste/duplicate, picker panel, ruler seek | playlist model tests + `song_mode_plays_playlist_clips` |
+| **Mixer insert effects**: 10 slots per track (pre-fader, master too), bypass, reorder, effect windows with knobs; 9 original effects: EQ, Filter, Compressor, Limiter, Delay (tempo sync, ping-pong), Reverb, Chorus, Distortion, Utility | 10 effect tests (stability at extreme settings, EQ/compressor/delay accuracy, reverb decay) + engine and session effect tests |
+| **Browser** (Alt+F8): folder tree (bundled packs, Music, Downloads, Desktop, Documents, user folders), search, click-to-preview, double-click = new channel, Enter = replace selected channel, Shift+Up/Down preview stepping, drag onto Channel Rack rows | preview test + listing test |
+| **Soundesti Essentials** sample pack: 32 original one-shots rendered from Soundesti's own instruments/effects (`cargo run -p soundesti-session --example make_pack`), installed to `Packs\` | renders reproducibly |
+| **Vector icons** everywhere (no emoji or font glyphs) | visual check |
 | **AI assistant setup** window (HELP menu): exact steps + Copy + one-click setup for Claude Code, Codex, Cursor, VS Code, Windsurf, Gemini CLI, Claude Desktop; built-in `--mcp-stdio` bridge | 4 unit tests; live bridge test with app auto-launch |
 
-**Automated tests: 117 passing** (`scripts\test.ps1`), plus 1 ignored real-device test (passing).
+**Automated tests: 145 passing** (`scripts\test.ps1`), plus 1 ignored real-device test (passing).
 
 ## Not done / known gaps (honest list)
-- Playlist / song mode, pattern clips, arrangement (Phase 3) — placeholder window only.
+- Playlist: no audio or automation clips, time markers, performance mode or clip-level transpose yet; song export renders the pattern only.
 - Recording, audio clips, MIDI devices, MIDI import/export (Phase 5).
-- Effects, sends, insert-to-insert routing, automation (Phase 4).
-- CLAP/VST3 hosting (Phase 6). Browser. FLAC/MP3 export.
+- Mixer: sends, insert-to-insert routing, sidechain, PDC and automation are not implemented; effects have generic knob panels (no custom graphical editors yet).
+- CLAP/VST3 hosting (Phase 6). FLAC/MP3 export. Browser shows WAV only (no presets, projects or plugin database).
 - Numpad and left/right-modifier shortcuts blocked by egui input (KI-002).
 - Piano roll: no chord/scale tools, arpeggiator, strum, chop, LFO, randomizer yet; no per-note pan/fine-pitch lanes.
 - Not yet measured: UI frame time with thousands of notes, long-session stability, real latency.
@@ -51,8 +57,9 @@ Next: finish Phase 2 gaps, then Phase 3 (Playlist / song mode).
 - (Resolved 2026-10-24: license GPL-3.0 confirmed; releases on GitHub Harel-k/soundesti; no code-signing certificate for now.)
 - Optional: antivirus exclusion for the repo `target` folder and `%USERPROFILE%\.cargo` / `.rustup` (KI-001).
 
-## Next priorities (owner paused FL-parity work on 2026-10-24 after the icon; resume here)
-1. Phase 3: Playlist with pattern clips, song mode transport, time markers, playlist tools/shortcuts.
-2. Raw keyboard hook for numpad + left/right modifiers (unblocks 17 shortcuts).
-3. Piano roll performance benchmark (thousands of notes), viewport culling check.
-4. Phase 4 groundwork: effect trait, insert slots, parametric EQ/compressor/delay/reverb.
+## Next priorities
+1. Automation clips (Playlist) and song-mode WAV export.
+2. Mixer sends / insert-to-insert routing / sidechain.
+3. Piano roll tool suite (arpeggiator, strum, chop, randomize, scales/chords) and event lanes.
+4. Raw keyboard hook for numpad + left/right modifiers (unblocks 17 shortcuts).
+5. Audio clips in the Playlist (drag from the Browser), recording.

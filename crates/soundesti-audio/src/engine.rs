@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use rtrb::{Consumer, Producer, PushError, RingBuffer};
 use soundesti_dsp::{Smoothed, balance_pan, enable_flush_denormals, sanitize};
-use soundesti_plugin_api::{Instrument, NoteEvent, NoteId, TimedEvent};
+use soundesti_plugin_api::{Effect, Instrument, NoteEvent, NoteId, TimedEvent};
 use soundesti_timeline::Tick;
 
 use crate::metronome::Metronome;
@@ -13,6 +13,8 @@ use crate::snapshot::PlaybackSnapshot;
 /// Mixer track 0 is the master; 1..=125 are inserts.
 pub const MASTER_TRACK: usize = 0;
 pub const MIXER_TRACKS: usize = 126;
+/// Insert effect slots per mixer track (FL Studio has 10).
+pub const FX_SLOTS: usize = 10;
 
 const COMMAND_QUEUE: usize = 4096;
 const GARBAGE_QUEUE: usize = 1024;
@@ -65,6 +67,11 @@ pub enum Command {
         id: u32,
         value: f32,
     },
+    /// Hand a decoded sample to a sample-based instrument (None clears it).
+    SetSample {
+        slot: usize,
+        sample: Option<std::sync::Arc<soundesti_plugin_api::SampleData>>,
+    },
     /// Live/preview note (piano keys, step clicks, typing keyboard).
     NoteOn {
         slot: usize,
@@ -81,6 +88,23 @@ pub enum Command {
         pan: f32,
         muted: bool,
     },
+    /// Put an effect in (or clear) an insert slot of a mixer track.
+    SetEffect {
+        track: usize,
+        slot: usize,
+        effect: Option<Box<dyn Effect>>,
+    },
+    SetEffectParam {
+        track: usize,
+        slot: usize,
+        id: u32,
+        value: f32,
+    },
+    SetEffectBypass {
+        track: usize,
+        slot: usize,
+        bypass: bool,
+    },
     SetMetronome(bool),
     /// Cut all sound immediately (Ctrl+H).
     Panic,
@@ -90,6 +114,8 @@ pub enum Command {
 pub enum Garbage {
     Snapshot(Box<PlaybackSnapshot>),
     Instrument(Box<dyn Instrument>),
+    Sample(std::sync::Arc<soundesti_plugin_api::SampleData>),
+    Effect(Box<dyn Effect>),
 }
 
 /// Control-thread side of the engine.
@@ -141,6 +167,25 @@ struct Track {
     left: Vec<f32>,
     right: Vec<f32>,
     used: bool,
+    fx: [Option<Box<dyn Effect>>; FX_SLOTS],
+    bypass: [bool; FX_SLOTS],
+}
+
+impl Track {
+    fn has_fx(&self) -> bool {
+        self.fx.iter().zip(self.bypass).any(|(f, b)| f.is_some() && !b)
+    }
+
+    /// Runs the insert chain in slot order (pre-fader, like FL Studio).
+    fn run_fx(&mut self, n: usize) {
+        for (fx, bypass) in self.fx.iter_mut().zip(self.bypass) {
+            if let Some(fx) = fx
+                && !bypass
+            {
+                fx.process(&mut self.left[..n], &mut self.right[..n]);
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -185,6 +230,8 @@ impl Engine {
                 left: vec![0.0; config.max_block],
                 right: vec![0.0; config.max_block],
                 used: false,
+                fx: Default::default(),
+                bypass: [false; FX_SLOTS],
             })
             .collect();
         let engine = Engine {
@@ -321,6 +368,10 @@ impl Engine {
                 };
                 self.play_sample = self.snapshot.tempo.sample_at_tick(tick, self.config.sample_rate);
                 self.trash(Garbage::Snapshot(old));
+                let bpm = self.snapshot.tempo.bpm_at(tick as Tick) as f32;
+                for fx in self.tracks.iter_mut().flat_map(|t| t.fx.iter_mut()).flatten() {
+                    fx.set_tempo(bpm);
+                }
             }
             Command::AddChannel { slot, instrument } => {
                 if slot >= self.channels.len() {
@@ -361,6 +412,15 @@ impl Engine {
                     ch.instrument.set_param(id, value);
                 }
             }
+            Command::SetSample { slot, sample } => {
+                let old = match self.channels.get_mut(slot) {
+                    Some(Some(ch)) => ch.instrument.set_sample(sample),
+                    _ => sample,
+                };
+                if let Some(old) = old {
+                    self.trash(Garbage::Sample(old));
+                }
+            }
             Command::NoteOn { slot, key, velocity } => {
                 let id = preview_id(slot, key);
                 self.push_event(slot, 0, NoteEvent::On { id, key, velocity });
@@ -373,6 +433,32 @@ impl Engine {
                     t.volume.set_target(volume.max(0.0));
                     t.pan.set_target(pan.clamp(-1.0, 1.0));
                     t.mute.set_target(if muted { 0.0 } else { 1.0 });
+                }
+            }
+            Command::SetEffect { track, slot, effect } => {
+                let bpm = self.snapshot.tempo.bpm_at(self.current_tick() as Tick) as f32;
+                let old = match self.tracks.get_mut(track).and_then(|t| t.fx.get_mut(slot)) {
+                    Some(place) => {
+                        let mut effect = effect;
+                        if let Some(fx) = effect.as_mut() {
+                            fx.set_tempo(bpm);
+                        }
+                        std::mem::replace(place, effect)
+                    }
+                    None => effect,
+                };
+                if let Some(old) = old {
+                    self.trash(Garbage::Effect(old));
+                }
+            }
+            Command::SetEffectParam { track, slot, id, value } => {
+                if let Some(Some(fx)) = self.tracks.get_mut(track).and_then(|t| t.fx.get_mut(slot)) {
+                    fx.set_param(id, value);
+                }
+            }
+            Command::SetEffectBypass { track, slot, bypass } => {
+                if let Some(b) = self.tracks.get_mut(track).and_then(|t| t.bypass.get_mut(slot)) {
+                    *b = bypass;
                 }
             }
             Command::SetMetronome(on) => self.metronome_on = on,
@@ -506,13 +592,19 @@ impl Engine {
             self.shared.channel_meters[slot].feed(pl, pr);
         }
 
-        // Inserts → master. (Insert-to-insert routing and effects come in Phase 4.)
+        // Inserts → effects → fader → master. Tracks with effects run even without input so
+        // reverb and delay tails ring out.
         let (master_slice, inserts) = self.tracks.split_at_mut(1);
         let master = &mut master_slice[0];
         for (idx, t) in inserts.iter_mut().enumerate() {
             if !t.used {
-                continue;
+                if !t.has_fx() {
+                    continue;
+                }
+                t.left[..n].fill(0.0);
+                t.right[..n].fill(0.0);
             }
+            t.run_fx(n);
             let (mut pl, mut pr) = (0.0f32, 0.0f32);
             for i in 0..n {
                 let gain = t.volume.next() * t.mute.next();
@@ -526,6 +618,7 @@ impl Engine {
             self.shared.track_meters[idx + 1].feed(pl, pr);
         }
 
+        master.run_fx(n);
         let (mut pl, mut pr) = (0.0f32, 0.0f32);
         for i in 0..n {
             let gain = master.volume.next() * master.mute.next();
@@ -738,6 +831,52 @@ mod tests {
         h.send(Command::SetTrack { track: 5, volume: 0.8, pan: 0.0, muted: true });
         let left = render(&mut e, 4_800, 512);
         assert!(left[1_000..].iter().all(|&x| x == 0.0));
+    }
+
+    /// Test effect: multiplies by `gain` (param 0).
+    struct Gain(f32);
+    impl Effect for Gain {
+        fn type_id(&self) -> &'static str {
+            "test.gain"
+        }
+        fn display_name(&self) -> &'static str {
+            "Gain"
+        }
+        fn params(&self) -> &'static [soundesti_plugin_api::ParamInfo] {
+            &[]
+        }
+        fn get_param(&self, _id: u32) -> f32 {
+            self.0
+        }
+        fn set_param(&mut self, _id: u32, value: f32) {
+            self.0 = value;
+        }
+        fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+            left.iter_mut().chain(right.iter_mut()).for_each(|x| *x *= self.0);
+        }
+    }
+
+    #[test]
+    fn insert_effects_process_and_bypass() {
+        let peak = |v: &[f32]| v.iter().fold(0.0f32, |m, x| m.max(x.abs()));
+        let (mut e, mut h) = setup(512, vec![note(0, PPQ * 8, 60)]);
+        h.send(Command::SetChannel { slot: 0, volume: 0.78, pan: 0.0, muted: false, track: 3 });
+        let dry = peak(&render(&mut e, 9_600, 512)[2_000..]);
+        h.send(Command::SetEffect { track: 3, slot: 0, effect: Some(Box::new(Gain(0.0))) });
+        let wet = render(&mut e, 4_800, 512);
+        assert!(peak(&wet[1_000..]) == 0.0, "gain-0 insert must silence the track");
+        h.send(Command::SetEffectParam { track: 3, slot: 0, id: 0, value: 0.5 });
+        let half = peak(&render(&mut e, 4_800, 512)[1_000..]);
+        assert!(half > 0.0 && half < dry * 0.8, "half gain: {half} vs dry {dry}");
+        h.send(Command::SetEffectBypass { track: 3, slot: 0, bypass: true });
+        let bypassed = peak(&render(&mut e, 4_800, 512)[1_000..]);
+        assert!(bypassed > half * 1.5, "bypass restores the dry level");
+        // Master effects apply too.
+        h.send(Command::SetEffect { track: MASTER_TRACK, slot: 9, effect: Some(Box::new(Gain(0.0))) });
+        assert!(peak(&render(&mut e, 4_800, 512)[1_000..]) == 0.0);
+        h.send(Command::SetEffect { track: 3, slot: 0, effect: None });
+        render(&mut e, 512, 512);
+        assert!(h.collect_garbage() >= 1, "removed effect is returned for freeing");
     }
 
     #[test]

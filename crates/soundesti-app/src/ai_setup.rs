@@ -383,7 +383,10 @@ impl App {
         }
         match &self.ai_setup.result {
             Some(Ok(m)) => {
-                ui.colored_label(theme::ACCENT, format!("✔ {m}"));
+                ui.horizontal(|ui| {
+                    crate::icons::inline(ui, crate::icons::Icon::Check, theme::ACCENT);
+                    ui.colored_label(theme::ACCENT, m);
+                });
             }
             Some(Err(e)) => {
                 ui.colored_label(theme::WARN, e);
