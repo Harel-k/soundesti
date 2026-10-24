@@ -55,6 +55,7 @@ Quick manual test: `scripts\mcp-call.ps1 get_state`.
 | `mixer_effect` | Insert effects: catalog, list, add, remove, set_param, bypass, move (10 slots per track) |
 | `playlist` | List / add / remove pattern clips, switch song mode |
 | `browser` | List bundled or local WAVs, preview one, load into a new or existing channel |
+| `plugins` | List / scan third-party plugins, add an instrument plugin as a channel or an effect plugin to a mixer slot, open a plugin's window |
 | `pattern` | select / new / rename |
 | `set_window` | Open/close any window |
 | `save_project`, `open_project`, `new_project` | Files: `.soundesti` projects; `open_project` also imports FL Studio `.flp` files. Refuses to discard unsaved work unless told |
@@ -74,7 +75,7 @@ saying so instead of pretending.
 
 ## Verified (2026-10-24)
 Unit tests (protocol, errors, host/origin checks, base64, real HTTP round trip) plus a live
-session against the running app: initialize → tools/list (26 tools) → build a beat (tempo,
+session against the running app: initialize → tools/list (27 tools) → build a beat (tempo,
 steps, new channel, bassline, filter cutoff, open mixer, Ctrl+A/Ctrl+B in the piano roll,
 play) → get_state confirmed playback and 10 notes → screenshot → undo restored 5 notes →
 a request with `Origin: https://evil.example` got 403. Stdio bridge: with Soundesti closed, `--mcp-stdio` launched it, answered initialize / tools/list / tools/call, and exited cleanly when stdin closed.

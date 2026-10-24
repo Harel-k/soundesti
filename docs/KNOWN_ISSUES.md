@@ -10,3 +10,6 @@
 | KI-007 | Medium | Update feed (GitHub Releases `update.json`) is trusted via HTTPS + the SHA-256 it lists; no Ed25519 signature yet, so a compromised GitHub account could ship a bad update. | Add an offline signing key + signature check. |
 | KI-008 | Low | Installer is per-user only (no Program Files / all-users option) and the exe is unsigned, so Windows SmartScreen may warn on first run ("More info → Run anyway"). | Owner declined a code-signing certificate for now (2026-10-24). |
 | KI-006 | Info | Wheel = vertical scroll, Shift+wheel = horizontal, Ctrl+wheel = zoom in the Piano roll. Exact FL wheel behaviour not verified yet. | Track in MOUSE_GESTURES.md. |
+
+## KI-PLUGIN-1: plugins run in-process
+Third-party plugins are loaded into Soundesti's own process. A plugin that crashes closes Soundesti (autosave keeps recent work). Scanning is isolated in a child process. FL Studio VSTi crashes in its own DLL shutdown, so Soundesti exits without unloading plugin code once any plugin was loaded.

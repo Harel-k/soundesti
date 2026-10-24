@@ -9,6 +9,7 @@
 //! Plugins run inside the Soundesti process: a plugin that crashes takes Soundesti with
 //! it. Scanning, the riskiest step, runs in a child process (see [`scan`]).
 
+mod clap;
 pub mod editor;
 pub mod scan;
 mod vst2;
@@ -95,6 +96,8 @@ pub trait PluginInstance: Send + Sync {
     fn close_editor(&self);
     /// Called regularly on the UI thread while the editor is open.
     fn editor_idle(&self) {}
+    /// Called every UI frame for every running plugin (CLAP main-thread callbacks).
+    fn main_thread_idle(&self) {}
     /// Audio thread only. Replaces `left`/`right` with the plugin's output; for effects they
     /// hold the input on entry. `events` are sorted and inside the block.
     fn process(&self, events: &[TimedEvent], left: &mut [f32], right: &mut [f32]);
@@ -126,7 +129,10 @@ pub fn load(desc: &PluginDesc, sample_rate: f32) -> Result<Arc<dyn PluginInstanc
             ANY_LOADED.store(true, std::sync::atomic::Ordering::Relaxed);
             Ok(Arc::new(vst3::Vst3Plugin::load(desc, sample_rate)?))
         }
-        PluginFormat::Clap => Err(HostError::NotAPlugin("CLAP hosting is not available yet".into())),
+        PluginFormat::Clap => {
+            ANY_LOADED.store(true, std::sync::atomic::Ordering::Relaxed);
+            Ok(Arc::new(clap::ClapPlugin::load(desc, sample_rate)?))
+        }
     }
 }
 
@@ -135,7 +141,7 @@ pub fn describe(format: PluginFormat, path: &Path) -> Result<Vec<PluginDesc>, Ho
     match format {
         PluginFormat::Vst2 => vst2::describe(path).map(|d| vec![d]),
         PluginFormat::Vst3 => vst3::describe(path),
-        PluginFormat::Clap => Err(HostError::NotAPlugin("CLAP hosting is not available yet".into())),
+        PluginFormat::Clap => clap::describe(path),
     }
 }
 

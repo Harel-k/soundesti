@@ -206,7 +206,7 @@ impl App {
             });
         }
         ui.separator();
-        ui.label(RichText::new("Effects are added in the Mixer (select a track, then an empty slot). VST plugins: OPTIONS > Manage plugins (VST3 and CLAP support is coming).").color(theme::TEXT_DIM));
+        ui.label(RichText::new("Effects are added in the Mixer (select a track, then an empty slot). VST, VST3 and CLAP plugins: OPTIONS > Manage plugins.").color(theme::TEXT_DIM));
     }
 
     fn song_info_ui(&mut self, ui: &mut Ui) {

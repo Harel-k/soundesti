@@ -122,6 +122,7 @@ impl App {
                 e.plugin.close_editor();
             }
         }
+        self.session.idle_plugins();
         for e in std::mem::take(&mut self.session.plugin_errors) {
             self.set_status(format!("Plugin problem: {e}"));
         }

@@ -229,6 +229,13 @@ impl Session {
         }
     }
 
+    /// Gives every running plugin its regular main-thread call (call once per UI frame).
+    pub fn idle_plugins(&self) {
+        for p in self.plugins.values() {
+            p.main_thread_idle();
+        }
+    }
+
     /// The running plugin at `key`, if any (for opening its editor).
     pub fn plugin(&self, key: PluginKey) -> Option<Arc<dyn PluginInstance>> {
         self.plugins.get(&key).cloned()
