@@ -21,3 +21,13 @@ To do before the first release: run `cargo deny check licenses` over the full tr
 - **CLAP:** MIT — compatible.
 - **AI model weights** (stem separation etc.): per-model review.
 - No FL Studio assets, presets, samples or code are used.
+
+## Added 2026-10-24
+| Crate | License | Use |
+|---|---|---|
+| flacenc | Apache-2.0 | FLAC export |
+| mp3lame-encoder / mp3lame-sys (LAME) | LGPL-3.0 | MP3 export (LGPL is compatible with Soundesti's GPL-3.0) |
+| vst3 | MIT OR Apache-2.0 | VST3 hosting bindings |
+| clap-sys | MIT OR Apache-2.0 | CLAP hosting bindings |
+| libloading | ISC | loading plugin DLLs |
+| midir | MIT | MIDI keyboard input |

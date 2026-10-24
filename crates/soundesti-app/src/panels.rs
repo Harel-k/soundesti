@@ -344,13 +344,46 @@ impl App {
 
     fn export_ui(&mut self, ui: &mut Ui) {
         let o = &mut self.export_opts;
+        let has_song = !self.project.playlist.clips.is_empty();
         egui::Grid::new("export").num_columns(2).show(ui, |ui| {
             ui.label("Content");
-            ui.label(format!("Current pattern: {}", self.project.current().name));
+            ui.horizontal(|ui| {
+                ui.selectable_value(
+                    &mut o.range,
+                    soundesti_export::Range::Pattern,
+                    format!("Pattern: {}", self.project.current().name),
+                );
+                ui.add_enabled_ui(has_song, |ui| {
+                    ui.selectable_value(&mut o.range, soundesti_export::Range::Song, "Full song")
+                })
+                .response
+                .on_disabled_hover_text("The Playlist is empty");
+            });
             ui.end_row();
-            ui.label("Loops");
-            ui.add(egui::DragValue::new(&mut o.loops).range(1..=64));
+            if o.range == soundesti_export::Range::Pattern {
+                ui.label("Loops");
+                ui.add(egui::DragValue::new(&mut o.loops).range(1..=64));
+                ui.end_row();
+            }
+            ui.label("Format");
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut o.format, soundesti_export::Format::Wav, "WAV");
+                ui.selectable_value(&mut o.format, soundesti_export::Format::Flac, "FLAC");
+                let mp3 = matches!(o.format, soundesti_export::Format::Mp3 { .. });
+                if ui.selectable_label(mp3, "MP3").clicked() && !mp3 {
+                    o.format = soundesti_export::Format::Mp3 { kbps: 320 };
+                }
+            });
             ui.end_row();
+            if let soundesti_export::Format::Mp3 { kbps } = &mut o.format {
+                ui.label("MP3 bitrate");
+                egui::ComboBox::from_id_salt("ex_kbps").selected_text(format!("{kbps} kbps")).show_ui(ui, |ui| {
+                    for k in [128, 192, 256, 320] {
+                        ui.selectable_value(kbps, k, format!("{k} kbps"));
+                    }
+                });
+                ui.end_row();
+            }
             ui.label("Tail");
             ui.add(egui::DragValue::new(&mut o.tail_seconds).range(0.0..=30.0).suffix(" s").speed(0.1));
             ui.end_row();
@@ -361,19 +394,29 @@ impl App {
                 }
             });
             ui.end_row();
-            ui.label("Bit depth");
-            egui::ComboBox::from_id_salt("ex_bits").selected_text(bit_name(o.bit_depth)).show_ui(ui, |ui| {
-                for b in [BitDepth::Int16, BitDepth::Int24, BitDepth::Float32] {
-                    ui.selectable_value(&mut o.bit_depth, b, bit_name(b));
-                }
-            });
-            ui.end_row();
+            if !matches!(o.format, soundesti_export::Format::Mp3 { .. }) {
+                ui.label("Bit depth");
+                egui::ComboBox::from_id_salt("ex_bits").selected_text(bit_name(o.bit_depth)).show_ui(ui, |ui| {
+                    let depths: &[BitDepth] = if o.format == soundesti_export::Format::Flac {
+                        &[BitDepth::Int16, BitDepth::Int24]
+                    } else {
+                        &[BitDepth::Int16, BitDepth::Int24, BitDepth::Float32]
+                    };
+                    for &b in depths {
+                        ui.selectable_value(&mut o.bit_depth, b, bit_name(b));
+                    }
+                });
+                ui.end_row();
+            }
         });
-        ui.label(
-            RichText::new("Song export (Playlist), FLAC, MP3 and stems arrive in later phases.")
-                .color(theme::TEXT_DIM)
-                .small(),
-        );
+        if o.range == soundesti_export::Range::Song && !has_song {
+            o.range = soundesti_export::Range::Pattern;
+        }
+        if matches!(o.format, soundesti_export::Format::Mp3 { .. }) && o.sample_rate > 48_000 {
+            ui.label(RichText::new("MP3 supports up to 48 kHz; choose 44.1 or 48 kHz.").color(theme::WARN).small());
+        }
+        ui.checkbox(&mut self.export_stems, "Split mixer tracks (one file per mixer track)")
+            .on_hover_text("Writes \"<name> - <track>.<ext>\" for every mixer track that has channels routed to it");
         if ui.button("Render…").clicked() {
             let opts: ExportOptions = self.export_opts;
             self.begin_export(opts);

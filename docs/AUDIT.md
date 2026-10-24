@@ -48,7 +48,7 @@ installer repair/upgrade file cleanup, update tamper rejection.
 | Channel Rack | Groups (Alt+G), zip/unzip, swing knob, graph editor, per-channel step count, "+" plugin list, channel settings window | Missing |
 | Pattern management | Clone/delete pattern, pattern colours, pattern picker | Partial (new/rename/select) |
 | MIDI | Device input, MIDI import Ctrl+M, export Ctrl+Shift+M | Missing |
-| Export | Song export, MP3 Ctrl+Shift+R, FLAC, stems | WAV pattern export only |
+| Export | Song export, MP3 Ctrl+Shift+R, FLAC, stems | **Done**: pattern/song, WAV/FLAC/MP3, stems |
 | Numpad / L-R modifier shortcuts | Pattern select on numpad, Num+/-, typing octave, slice/quantize gestures | Blocked (KI-002) |
 
 ### P2 — main window, polish

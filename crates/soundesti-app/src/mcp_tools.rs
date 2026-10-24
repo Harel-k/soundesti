@@ -206,8 +206,8 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "export_wav",
-            "Render the current pattern to a WAV file (same engine as playback). Path must end in .wav.",
-            json!({"path": {"type": "string"}, "loops": {"type": "integer"}, "tail_seconds": {"type": "number"}, "sample_rate": {"type": "integer"}, "bit_depth": {"type": "string", "enum": ["16", "24", "32f"]}}),
+            "Render audio with the playback engine. The format follows the path extension: .wav, .flac or .mp3. `range`: pattern (default, `loops` times) or song (the Playlist). `stems`: true writes one file per mixer track next to `path`.",
+            json!({"path": {"type": "string"}, "range": {"type": "string", "enum": ["pattern", "song"]}, "stems": {"type": "boolean"}, "loops": {"type": "integer"}, "tail_seconds": {"type": "number"}, "sample_rate": {"type": "integer"}, "bit_depth": {"type": "string", "enum": ["16", "24", "32f"]}, "kbps": {"type": "integer", "description": "MP3 bitrate (128-320)"}}),
             &["path"],
         ),
         tool(
@@ -896,11 +896,21 @@ impl App {
             let _ = reply.send(Err("missing `path`".into()));
             return;
         };
-        if path.extension().is_none_or(|e| !e.eq_ignore_ascii_case("wav")) {
-            let _ = reply.send(Err("path must end in .wav".into()));
-            return;
+        let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        let format = match ext.as_str() {
+            "wav" => soundesti_export::Format::Wav,
+            "flac" => soundesti_export::Format::Flac,
+            "mp3" => soundesti_export::Format::Mp3 { kbps: i(a, "kbps").unwrap_or(320).clamp(96, 320) as u32 },
+            _ => {
+                let _ = reply.send(Err("path must end in .wav, .flac or .mp3".into()));
+                return;
+            }
+        };
+        let mut opts = soundesti_export::ExportOptions { format, ..Default::default() };
+        if s(a, "range") == Some("song") {
+            opts.range = soundesti_export::Range::Song;
         }
-        let mut opts = soundesti_export::ExportOptions::default();
+        let stems = b(a, "stems").unwrap_or(false);
         if let Some(l) = i(a, "loops") {
             opts.loops = l.clamp(1, 64) as u32;
         }
@@ -915,16 +925,20 @@ impl App {
             Some("32f") => soundesti_export::BitDepth::Float32,
             _ => soundesti_export::BitDepth::Int24,
         };
+        self.session.capture_plugin_states(&mut self.project);
         let project = self.project.clone();
         std::thread::spawn(move || {
-            let res = soundesti_export::export_wav(&project, &path, &opts, |_| true)
-                .map(|r| {
+            let res = if stems {
+                soundesti_export::export_stems(&project, &path, &opts, |_| true)
+                    .map(|files| ToolOutput::Text(json!({"ok": true, "files": files}).to_string()))
+            } else {
+                soundesti_export::export(&project, &path, &opts, |_| true).map(|r| {
                     ToolOutput::Text(
                         json!({"ok": true, "path": path, "seconds": r.seconds, "peak": r.peak}).to_string(),
                     )
                 })
-                .map_err(|e| e.to_string());
-            let _ = reply.send(res);
+            };
+            let _ = reply.send(res.map_err(|e| e.to_string()));
         });
     }
 }

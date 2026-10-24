@@ -172,6 +172,8 @@ pub struct App {
     pub quantize_ends: bool,
     pub help_query: String,
     pub export_opts: soundesti_export::ExportOptions,
+    /// Render one file per mixer track (FL's `Split mixer tracks`).
+    pub export_stems: bool,
     /// Action waiting to run after the unsaved-changes prompt.
     pub after: Option<AfterConfirm>,
     pub rack_paint: Option<crate::channel_rack::StepPaint>,
@@ -270,6 +272,7 @@ impl App {
             quantize_ends: false,
             help_query: String::new(),
             export_opts: soundesti_export::ExportOptions::default(),
+            export_stems: false,
             after: None,
             rack_paint: None,
             started: false,

@@ -14,9 +14,8 @@ use crate::app::{AfterConfirm, App, Dialog};
 pub struct ExportJob {
     pub progress: Arc<AtomicU32>,
     pub cancel: Arc<AtomicBool>,
-    rx: mpsc::Receiver<Result<ExportReport, String>>,
+    rx: mpsc::Receiver<Result<String, String>>,
     pub path: PathBuf,
-    pub started: Instant,
 }
 
 impl ExportJob {
@@ -258,45 +257,63 @@ impl App {
     }
 
     pub fn begin_export(&mut self, opts: ExportOptions) {
+        let ext = opts.format.extension();
+        let label = match opts.format {
+            soundesti_export::Format::Wav => "WAV audio",
+            soundesti_export::Format::Flac => "FLAC audio",
+            soundesti_export::Format::Mp3 { .. } => "MP3 audio",
+        };
         let Some(path) = rfd::FileDialog::new()
-            .add_filter("WAV audio", &["wav"])
-            .set_file_name(format!("{}.wav", self.title_or_untitled()))
+            .add_filter(label, &[ext])
+            .set_file_name(format!("{}.{ext}", self.title_or_untitled()))
             .save_file()
-            .map(|p| with_extension(p, "wav"))
+            .map(|p| with_extension(p, ext))
         else {
             return;
         };
         let progress = Arc::new(AtomicU32::new(0));
         let cancel = Arc::new(AtomicBool::new(false));
         let (tx, rx) = mpsc::channel();
+        // Plugins render with the settings you hear right now.
+        self.session.capture_plugin_states(&mut self.project);
         let project = self.project.clone();
+        let stems = self.export_stems;
         let (p2, c2, path2) = (progress.clone(), cancel.clone(), path.clone());
         std::thread::Builder::new()
             .name("soundesti-export".into())
             .spawn(move || {
-                let res = soundesti_export::export_wav(&project, &path2, &opts, |f| {
+                let started = Instant::now();
+                let tick = |f: f32| {
                     p2.store(f.to_bits(), Ordering::Relaxed);
                     !c2.load(Ordering::Relaxed)
-                })
-                .map_err(|e| e.to_string());
-                let _ = tx.send(res);
+                };
+                let res = if stems {
+                    soundesti_export::export_stems(&project, &path2, &opts, tick).map(|files| {
+                        let dir = path2.parent().map(|d| d.display().to_string()).unwrap_or_default();
+                        format!("Exported {} stems to {dir} in {:.1} s", files.len(), started.elapsed().as_secs_f32())
+                    })
+                } else {
+                    soundesti_export::export(&project, &path2, &opts, tick).map(|r: ExportReport| {
+                        format!(
+                            "Exported {} ({:.1} s, peak {:.1} dBFS) in {:.1} s",
+                            path2.display(),
+                            r.seconds,
+                            20.0 * r.peak.max(1e-9).log10(),
+                            started.elapsed().as_secs_f32()
+                        )
+                    })
+                };
+                let _ = tx.send(res.map_err(|e| e.to_string()));
             })
             .expect("spawn export thread");
-        self.export_job = Some(ExportJob { progress, cancel, rx, path, started: Instant::now() });
+        self.export_job = Some(ExportJob { progress, cancel, rx, path });
         self.win.export = false;
     }
 
     pub fn poll_export(&mut self) {
         let Some(job) = &self.export_job else { return };
         match job.rx.try_recv() {
-            Ok(Ok(r)) => {
-                let msg = format!(
-                    "Exported {} ({:.1} s, peak {:.1} dBFS) in {:.1} s",
-                    job.path.display(),
-                    r.seconds,
-                    20.0 * r.peak.max(1e-9).log10(),
-                    job.started.elapsed().as_secs_f32()
-                );
+            Ok(Ok(msg)) => {
                 self.set_status(msg);
                 self.export_job = None;
             }

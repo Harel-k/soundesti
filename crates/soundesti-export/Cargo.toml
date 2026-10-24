@@ -11,4 +11,6 @@ soundesti-project.workspace = true
 soundesti-session.workspace = true
 soundesti-timeline.workspace = true
 hound.workspace = true
+flacenc = "0.5"
+mp3lame-encoder = "0.2"
 thiserror.workspace = true
