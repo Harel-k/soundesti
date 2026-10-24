@@ -14,7 +14,7 @@ built from scratch with original code, instruments and artwork.
 - **Mixer**: master + 125 inserts with faders, pan, mute, solo, meters and **10 insert effect slots** per track.
 - **Instruments** (all original): Sampler, Chopper (slicer), Padz (16 pads), Kickr, Clapper, Hatz, Trident (subtractive), Orbit (FM), Tide (wavetable), Harpa (plucked string) — with presets.
 - **Effects** (all original): EQ, Filter, Compressor, Multiband Compressor, Gate, Limiter, Delay, Reverb, Chorus, Phaser, Flanger, Distortion, Polish (enhancer), Utility.
-- **VST, VST3 and CLAP plugins**: instruments and mixer effects with their own windows (OPTIONS › Manage plugins). With FL Studio installed, *FL Studio VSTi* brings FL's own instruments and effects in.
+- **VST, VST3 and CLAP plugins**: instruments and mixer effects with their own windows (OPTIONS › Manage plugins). With FL Studio installed, *FL Studio VSTi* brings FL's own instruments and effects in ([docs/FL_PLUGINS.md](docs/FL_PLUGINS.md)).
 - **FL Studio project import** (.flp): tempo, channels, patterns, notes and the Playlist come across; FL's own plugins become the closest Soundesti instruments.
 - FL-style layout: Browser docked on the left, Playlist filling the workspace.
 - **Browser** with click-to-preview and drag-to-Channel-Rack, plus the bundled *Soundesti Essentials* pack of 32 original one-shots.
