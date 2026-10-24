@@ -1,0 +1,11 @@
+[package]
+name = "soundesti-dsp"
+description = "Shared real-time-safe DSP building blocks: oscillators, envelopes, filters, smoothing."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+proptest.workspace = true

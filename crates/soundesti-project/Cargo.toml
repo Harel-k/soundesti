@@ -1,0 +1,15 @@
+[package]
+name = "soundesti-project"
+description = "Soundesti project model, versioned .soundesti file format, atomic save, undo history."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+soundesti-timeline.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

@@ -1,0 +1,36 @@
+[package]
+name = "soundesti-app"
+description = "Soundesti desktop application."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+build = "build.rs"
+
+[build-dependencies]
+winresource = "0.1"
+
+[[bin]]
+name = "soundesti"
+path = "src/main.rs"
+
+[dependencies]
+soundesti-audio.workspace = true
+soundesti-audio-device.workspace = true
+soundesti-commands.workspace = true
+soundesti-dsp.workspace = true
+soundesti-export.workspace = true
+soundesti-plugin-api.workspace = true
+soundesti-project.workspace = true
+soundesti-session.workspace = true
+soundesti-shortcuts.workspace = true
+soundesti-synthesis.workspace = true
+soundesti-timeline.workspace = true
+soundesti-updater = { path = "../soundesti-updater" }
+eframe.workspace = true
+egui.workspace = true
+rfd.workspace = true
+log.workspace = true
+env_logger.workspace = true
+serde.workspace = true
+serde_json.workspace = true

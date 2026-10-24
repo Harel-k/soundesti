@@ -1,0 +1,9 @@
+/target
+*.soundesti.tmp
+/dist
+/scratch
+*.log
+
+# Private, never published
+MasterProductionPrompt.txt
+CLAUDE.local.md

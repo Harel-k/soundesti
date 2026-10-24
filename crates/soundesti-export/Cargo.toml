@@ -1,0 +1,14 @@
+[package]
+name = "soundesti-export"
+description = "Offline rendering and audio file export (WAV now; FLAC/MP3 planned)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+soundesti-audio.workspace = true
+soundesti-project.workspace = true
+soundesti-session.workspace = true
+soundesti-timeline.workspace = true
+hound.workspace = true
+thiserror.workspace = true

@@ -1,0 +1,14 @@
+[package]
+name = "soundesti-updater"
+description = "Update feed check, download and SHA-256 verification shared by the app and the installer."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2 = "0.11"
+semver = "1.0"
+ureq = "3.5"

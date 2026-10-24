@@ -1,0 +1,18 @@
+Soundesti — free digital audio workstation
+Copyright (C) 2026 The Soundesti contributors
+
+This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software Foundation,
+either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details:
+https://www.gnu.org/licenses/gpl-3.0.html
+
+Soundesti is free forever: no subscriptions, no trial limits, no watermarks, no
+telemetry. It is an independent project, not affiliated with or endorsed by
+Image-Line. "FL Studio" is a trademark of Image-Line Software.
+
+Third-party components are used under their own licenses (MIT, Apache-2.0 and
+similar); see docs/LICENSE_AUDIT.md in the source repository.

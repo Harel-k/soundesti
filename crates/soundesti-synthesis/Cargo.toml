@@ -1,0 +1,10 @@
+[package]
+name = "soundesti-synthesis"
+description = "Soundesti native instruments."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+soundesti-dsp.workspace = true
+soundesti-plugin-api.workspace = true

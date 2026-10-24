@@ -1,0 +1,13 @@
+[package]
+name = "soundesti-session"
+description = "Bridges the project model to the audio engine: instrument creation, snapshots, state sync."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+soundesti-audio.workspace = true
+soundesti-project.workspace = true
+soundesti-synthesis.workspace = true
+soundesti-plugin-api.workspace = true
+soundesti-timeline.workspace = true

@@ -1,0 +1,51 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# Confirmed by the owner 2026-10-24 (docs/DECISIONS.md D-008).
+license = "GPL-3.0-or-later"
+rust-version = "1.99"
+
+[workspace.dependencies]
+# internal
+soundesti-timeline = { path = "crates/soundesti-timeline" }
+soundesti-dsp = { path = "crates/soundesti-dsp" }
+soundesti-plugin-api = { path = "crates/soundesti-plugin-api" }
+soundesti-synthesis = { path = "crates/soundesti-synthesis" }
+soundesti-audio = { path = "crates/soundesti-audio" }
+soundesti-audio-device = { path = "crates/soundesti-audio-device" }
+soundesti-project = { path = "crates/soundesti-project" }
+soundesti-session = { path = "crates/soundesti-session" }
+soundesti-commands = { path = "crates/soundesti-commands" }
+soundesti-shortcuts = { path = "crates/soundesti-shortcuts" }
+soundesti-export = { path = "crates/soundesti-export" }
+
+# external (versions verified on crates.io 2026-10-24, see docs/DECISIONS.md)
+eframe = { version = "0.37", features = ["persistence"] }
+egui = "0.37"
+cpal = "0.18"
+rtrb = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "1.1"
+hound = "3.5"
+thiserror = "2.0"
+anyhow = "1.0"
+log = "0.4"
+env_logger = "0.11"
+rfd = "0.17"
+proptest = "1.12"
+
+[profile.dev]
+# DSP is unusably slow at opt-level 0; keep debug info but optimize dependencies and our code a bit.
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

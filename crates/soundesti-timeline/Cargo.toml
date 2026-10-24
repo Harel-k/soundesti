@@ -1,0 +1,12 @@
+[package]
+name = "soundesti-timeline"
+description = "Musical time: PPQ ticks, tempo maps, time signatures, bars/beats/ticks."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

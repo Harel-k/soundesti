@@ -1,0 +1,12 @@
+[package]
+name = "soundesti-shortcuts"
+description = "Context-sensitive shortcut profiles, key parsing, conflict detection and dispatch rules."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+soundesti-commands.workspace = true
+serde.workspace = true
+toml.workspace = true
+thiserror.workspace = true
