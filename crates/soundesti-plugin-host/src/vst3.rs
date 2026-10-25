@@ -769,6 +769,7 @@ impl Vst3Plugin {
 
 impl Drop for Vst3Plugin {
     fn drop(&mut self) {
+        crate::pin::pin_new_modules();
         self.close_editor();
         unsafe {
             if self.active.swap(false, Ordering::AcqRel) {

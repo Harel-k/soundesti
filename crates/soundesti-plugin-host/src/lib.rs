@@ -11,6 +11,7 @@
 
 mod clap;
 pub mod editor;
+mod pin;
 pub mod scan;
 mod vst2;
 mod vst3;
@@ -120,6 +121,14 @@ pub fn exit_skipping_plugin_shutdown(code: u32) -> ! {
 
 /// Loads and starts a plugin described by a scan result.
 pub fn load(desc: &PluginDesc, sample_rate: f32) -> Result<Arc<dyn PluginInstance>, HostError> {
+    pin::remember_baseline();
+    let result = load_inner(desc, sample_rate);
+    // Keep every DLL the plugin pulled in loaded for good (see pin.rs).
+    pin::pin_new_modules();
+    result
+}
+
+fn load_inner(desc: &PluginDesc, sample_rate: f32) -> Result<Arc<dyn PluginInstance>, HostError> {
     match desc.format {
         PluginFormat::Vst2 => {
             ANY_LOADED.store(true, std::sync::atomic::Ordering::Relaxed);

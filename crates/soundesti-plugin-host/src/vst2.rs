@@ -371,6 +371,8 @@ impl Vst2Plugin {
 
 impl Drop for Vst2Plugin {
     fn drop(&mut self) {
+        // DLLs the plugin loaded since (e.g. when FL Studio VSTi opened FL) stay loaded.
+        crate::pin::pin_new_modules();
         unsafe {
             if self.editor_open.swap(false, Ordering::AcqRel) {
                 dispatch(self.effect, EFF_EDIT_CLOSE, 0, 0, std::ptr::null_mut(), 0.0);
@@ -471,6 +473,7 @@ impl PluginInstance for Vst2Plugin {
     }
 
     fn close_editor(&self) {
+        crate::pin::pin_new_modules();
         if self.editor_open.swap(false, Ordering::AcqRel) {
             unsafe { dispatch(self.effect, EFF_EDIT_CLOSE, 0, 0, std::ptr::null_mut(), 0.0) };
         }

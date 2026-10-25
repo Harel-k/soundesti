@@ -372,6 +372,7 @@ impl ClapPlugin {
 
 impl Drop for ClapPlugin {
     fn drop(&mut self) {
+        crate::pin::pin_new_modules();
         self.close_editor();
         unsafe {
             let p = &*self.plugin;

@@ -13,3 +13,5 @@
 
 ## KI-PLUGIN-1: plugins run in-process
 Third-party plugins are loaded into Soundesti's own process. A plugin that crashes closes Soundesti (autosave keeps recent work). Scanning is isolated in a child process. FL Studio VSTi crashes in its own DLL shutdown, so Soundesti exits without unloading plugin code once any plugin was loaded.
+
+Fixed in 0.5.1: FL Studio VSTi unloaded its own engine DLL when an instance closed and crashed about ten seconds later when a leftover timer ran. Soundesti now pins every DLL a plugin loads so it is never unloaded while Soundesti runs.
